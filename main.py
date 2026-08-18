@@ -3,6 +3,8 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from supabase import create_client, Client
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 app = FastAPI(title="Auto Parts Inventory API")
 
@@ -94,9 +96,6 @@ def sell_part(part_id: int, sell_data: PartSell):
     response = supabase.table("parts").update(update_data).eq("id", part_id).execute()
     return response.data
 
-
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 
 # Разрешаваме достъп от мобилни устройства (CORS)
 app.add_middleware(
