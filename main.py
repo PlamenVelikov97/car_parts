@@ -100,7 +100,7 @@ def update_warehouse(wh_id: int, wh: WarehouseCreate):
     return res.data
   except Exception as e:
     raise HTTPException(
-        status_code=500, detail=f"Грешка при дублиране/редакция: {str(e)}"
+        status_code=500, detail=f"Грешка при редакция на склад: {str(e)}"
     )
 
 
@@ -122,7 +122,8 @@ def delete_warehouse(wh_id: int):
 @app.get("/cars/summary/")
 def get_cars_summary():
   try:
-    cars_res = supabase.table("cars").select("*").execute()
+    # Зареждаме колите заедно със свързания склад (warehouses)
+    cars_res = supabase.table("cars").select("*, warehouses(*)").execute()
     cars = cars_res.data or []
 
     for car in cars:
@@ -243,8 +244,8 @@ def create_part(part: PartCreate):
 @app.get("/parts/search")
 def search_parts(q: Optional[str] = Query(None)):
   try:
-    # Връщаме всички части заедно с данните за колата, за да ги филтрираме 100% точно
-    res = supabase.table("parts").select("*, cars(*)").execute()
+    # Зареждаме частите заедно с колата и склада на колата (cars(*, warehouses(*)))
+    res = supabase.table("parts").select("*, cars(*, warehouses(*))").execute()
     return res.data or []
   except Exception as e:
     print("Грешка при търсене на части:", e)
