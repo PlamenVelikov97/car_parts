@@ -1,0 +1,5 @@
+Plaintext
+fastapi
+uvicorn
+supabase
+pydantic
