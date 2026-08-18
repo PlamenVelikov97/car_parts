@@ -1,10 +1,10 @@
 import os
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
-from supabase import create_client, Client
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from supabase import Client, create_client
 
 app = FastAPI(title="Auto Parts Inventory API")
 
@@ -12,125 +12,63 @@ app = FastAPI(title="Auto Parts Inventory API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# Данни за връзка с Supabase (взимат се от 환경 променливи)
-SUPABASE_URL = os.getenv("SUPABASE_URL", "ТВОЯТ_SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "ТВОЯТ_SUPABASE_ANON_KEY")
+# Данни за връзка с Supabase
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+
 # --- Pydantic Схеми за валидация ---
 class CarCreate(BaseModel):
-    title: str
-    purchase_price: float
-    warehouse_id: int
+  title: str
+  purchase_price: float
+  warehouse_id: int
+
 
 class PartCreate(BaseModel):
-    title: str
-    oem_number: Optional[str] = None
-    compatible_models: Optional[str] = None
-    price: float
-    status: str = "На колата"  # 'На колата', 'На рафт', 'Продадено'
-    shelf_location: Optional[str] = None
-    car_id: Optional[int] = None
-    warehouse_id: Optional[int] = None
-    photo_url: Optional[str] = None
+  title: str
+  oem_number: Optional[str] = None
+  compatible_models: Optional[str] = None
+  price: float
+  status: str = "На колата"
+  shelf_location: Optional[str] = None
+  car_id: Optional[int] = None
+  warehouse_id: Optional[int] = None
+  photo_url: Optional[str] = None
+
 
 class PartSell(BaseModel):
-    sold_price: float
+  sold_price: float
+
 
 # --- Маршрути (Endpoints) ---
 
+
 @app.get("/")
 def home():
-    return {"message": "Auto Parts Inventory API е онлайн!"}
-
-# 1. Добавяне на нова кола-донор
-@app.post("/cars/")
-def create_car(car: CarCreate):
-    response = supabase.table("cars").insert(car.dict()).execute()
-    return response.data
-
-# 2. Финансова справка за кола ($+ / -$)
-@app.get("/cars/{car_id}/financials")
-def get_car_financials(car_id: int):
-    # Взимаме колата
-    car_res = supabase.table("cars").select("*").eq("id", car_id).execute()
-    if not car_res.data:
-        raise HTTPException(status_code=404, detail="Колата не е намерена")
-    
-    car = car_res.data[0]
-    investment = float(car["purchase_price"])
-    
-    # Изчисляваме сумата от продадените части
-    parts_res = supabase.table("parts").select("sold_price").eq("car_id", car_id).eq("status", "Продадено").execute()
-    
-    total_sales = sum([float(p["sold_price"] or 0) for p in parts_res.data])
-    balance = total_sales - investment
-    
-    return {
-        "car_title": car["title"],
-        "investment": investment,
-        "total_sales": total_sales,
-        "balance": balance,
-        "is_profitable": balance >= 0
-    }
-
-# 3. Добавяне на нова част
-@app.post("/parts/")
-def create_part(part: PartCreate):
-    response = supabase.table("parts").insert(part.dict()).execute()
-    return response.data
-
-# 4. Търсачка (по име, OEM номер или модел)
-@app.get("/parts/search")
-def search_parts(q: str = Query(..., min_length=2)):
-    # Търси съвпадения в title, oem_number или compatible_models
-    response = supabase.table("parts").select("*, warehouses(name), cars(title)").or_(
-        f"title.ilike.%{q}%,oem_number.ilike.%{q}%,compatible_models.ilike.%{q}%"
-    ).execute()
-    return response.data
-
-# 5. Продажба на част
-@app.put("/parts/{part_id}/sell")
-def sell_part(part_id: int, sell_data: PartSell):
-    update_data = {
-        "status": "Продадено",
-        "sold_price": sell_data.sold_price
-    }
-    response = supabase.table("parts").update(update_data).eq("id", part_id).execute()
-    return response.data
+  return {"message": "Auto Parts Inventory API е онлайн!"}
 
 
-@app.get("/ui")
-def get_ui():
-  return FileResponse("index.html")
-
-# Вземане на всички складове за падащото меню
-@app.get("/warehouses/")
-def get_warehouses():
-  response = supabase.table("warehouses").select("*").execute()
-  return response.data
-
-# 1. Вземане на всички складове (за падащото меню)
+# 1. Складове (за падащото меню)
 @app.get("/warehouses/")
 def get_warehouses():
   response = supabase.table("warehouses").select("*").execute()
   return response.data
 
 
-# 2. Вземане на всички коли + техния финансов баланс
+# 2. Вземане на коли + Финансов баланс
 @app.get("/cars/summary")
 def get_cars_summary():
   cars_res = supabase.table("cars").select("*").execute()
   cars = cars_res.data
 
   for car in cars:
-    # Вземаме всички части за тази кола
     parts_res = (
         supabase.table("parts")
         .select("price, sold_price, status")
@@ -139,12 +77,11 @@ def get_cars_summary():
     )
     parts = parts_res.data
 
-    # Изчисляваме приходите
-    total_parts_price = sum(p["price"] for p in parts)
+    total_parts_price = sum(p["price"] for p in parts if p.get("price"))
     total_sales = sum(
         p["sold_price"]
         for p in parts
-        if p["status"] == "Продадено" and p["sold_price"]
+        if p.get("status") == "Продадено" and p.get("sold_price")
     )
     net_profit = total_sales - car["purchase_price"]
 
@@ -155,3 +92,46 @@ def get_cars_summary():
 
   return cars
 
+
+# 3. Добавяне на нова кола-донор
+@app.post("/cars/")
+def create_car(car: CarCreate):
+  response = supabase.table("cars").insert(car.dict()).execute()
+  return response.data
+
+
+# 4. Добавяне на нова част
+@app.post("/parts/")
+def create_part(part: PartCreate):
+  response = supabase.table("parts").insert(part.dict()).execute()
+  return response.data
+
+
+# 5. Търсачка за части
+@app.get("/parts/search")
+def search_parts(q: str = Query(..., min_length=2)):
+  response = (
+      supabase.table("parts")
+      .select("*, warehouses(name), cars(title)")
+      .or_(
+          f"title.ilike.%{q}%,oem_number.ilike.%{q}%,compatible_models.ilike.%{q}%"
+      )
+      .execute()
+  )
+  return response.data
+
+
+# 6. Продажба на част
+@app.put("/parts/{part_id}/sell")
+def sell_part(part_id: int, sell_data: PartSell):
+  update_data = {"status": "Продадено", "sold_price": sell_data.sold_price}
+  response = (
+      supabase.table("parts").update(update_data).eq("id", part_id).execute()
+  )
+  return response.data
+
+
+# 7. Отваряне на мобилния HTML
+@app.get("/ui")
+def get_ui():
+  return FileResponse("index.html")
