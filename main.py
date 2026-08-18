@@ -23,9 +23,6 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-# --- PYDANTIC МОДЕЛИ ---
-
-
 class WarehouseCreate(BaseModel):
   name: str
   address: Optional[str] = None
@@ -60,9 +57,6 @@ def to_dict(model: BaseModel) -> dict:
   return model.dict()
 
 
-# --- РУТОВЕ ЗА ИНТЕРФЕЙС ---
-
-
 @app.get("/")
 @app.get("/ui")
 def get_ui():
@@ -71,7 +65,7 @@ def get_ui():
   return FileResponse("index.html")
 
 
-# --- СКЛАДОВЕ (Warehouses) ---
+# --- СКЛАДОВЕ ---
 
 
 @app.get("/warehouses")
@@ -121,7 +115,7 @@ def delete_warehouse(wh_id: int):
     )
 
 
-# --- КОЛИ (Cars) ---
+# --- КОЛИ ---
 
 
 @app.get("/cars/summary")
@@ -209,7 +203,7 @@ def delete_car(car_id: int):
     )
 
 
-# --- ЧАСТИ & СНИМКИ (Parts & Photos) ---
+# --- ЧАСТИ & СНИМКИ ---
 
 
 @app.post("/upload-photo")
@@ -248,30 +242,12 @@ def create_part(part: PartCreate):
 
 @app.get("/parts/search")
 def search_parts(q: Optional[str] = Query(None)):
-  search_val = q.strip() if q and q.strip() else ""
-
-  # 1. Опит за търсене чрез PostgreSQL функцията search_parts_and_cars
   try:
-    res = supabase.rpc(
-        "search_parts_and_cars", {"search_term": search_val}
-    ).execute()
+    # Връщаме всички части заедно с данните за колата, за да ги филтрираме 100% точно
+    res = supabase.table("parts").select("*, cars(*)").execute()
     return res.data or []
   except Exception as e:
-    print("RPC търсенето не успя, преминаване към стандартна заявка:", e)
-
-  # 2. Fallback вариант към стандартна заявка
-  try:
-    query = supabase.table("parts").select("*, cars(make, model, title)")
-    if search_val:
-      term = f"%{search_val}%"
-      res = query.or_(
-          f"title.ilike.{term},oem_number.ilike.{term},compatible_models.ilike.{term}"
-      ).execute()
-    else:
-      res = query.execute()
-    return res.data or []
-  except Exception as inner_e:
-    print("Грешка при търсене на части:", inner_e)
+    print("Грешка при търсене на части:", e)
     return []
 
 
