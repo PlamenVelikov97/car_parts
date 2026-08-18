@@ -8,6 +8,15 @@ from fastapi.responses import FileResponse
 
 app = FastAPI(title="Auto Parts Inventory API")
 
+# Разрешаваме достъп от мобилни устройства (CORS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 # Данни за връзка с Supabase (взимат се от 환경 променливи)
 SUPABASE_URL = os.getenv("SUPABASE_URL", "ТВОЯТ_SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "ТВОЯТ_SUPABASE_ANON_KEY")
@@ -95,15 +104,6 @@ def sell_part(part_id: int, sell_data: PartSell):
     }
     response = supabase.table("parts").update(update_data).eq("id", part_id).execute()
     return response.data
-
-
-# Разрешаваме достъп от мобилни устройства (CORS)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 @app.get("/ui")
