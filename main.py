@@ -151,3 +151,4 @@ def get_ui():
   if not os.path.exists("index.html"):
     raise HTTPException(status_code=404, detail="index.html не е намерен")
   return FileResponse("index.html")
+    
