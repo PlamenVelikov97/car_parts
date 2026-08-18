@@ -209,13 +209,21 @@
         e.preventDefault();
         const data = {
             name: document.getElementById('wh_name').value,
-            address: document.getElementById('wh_address').value
+            address: document.getElementById('wh_address').value || null
         };
-        await fetch('/warehouses/', {
+
+        const res = await fetch('/warehouses', {  // <-- Без наклонена черта накрая
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(data)
         });
+
+        if (!res.ok) {
+            const errorData = await res.json();
+            alert('Грешка при запазване: ' + (errorData.detail || 'Неизвестна грешка'));
+            return;
+        }
+
         alert('Складът е добавен успешно!');
         document.getElementById('wh_name').value = '';
         document.getElementById('wh_address').value = '';
