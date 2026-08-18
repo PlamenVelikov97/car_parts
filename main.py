@@ -17,7 +17,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Премахване на излишни наклонени черти и разстояния от URL-а
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
@@ -30,7 +29,8 @@ class WarehouseCreate(BaseModel):
 
 
 class CarCreate(BaseModel):
-  title: str
+  make: str  # Марка (напр. Audi)
+  model: str  # Модел (напр. A4 B8)
   purchase_price: float
   warehouse_id: Optional[int] = None
 
@@ -52,7 +52,6 @@ class PartSell(BaseModel):
 
 
 def to_dict(model: BaseModel) -> dict:
-  """Конвертира Pydantic модел към речник безопасно за v1 и v2."""
   if hasattr(model, "model_dump"):
     return model.model_dump()
   return model.dict()
@@ -81,15 +80,10 @@ def get_warehouses():
 @app.post("/warehouses/")
 def create_warehouse(wh: WarehouseCreate):
   try:
-    # Превръщаме Pydantic модела в речник, премахвайки None стойности
     data = to_dict(wh)
-    # Изчистваме празни полета, за да ползва подразбиращите се стойности в DB
-    data = {k: v for k, v in data.items() if v is not None}
-
     res = supabase.table("warehouses").insert(data).execute()
     return res.data
   except Exception as e:
-    print(f"Грешка при запис на склад: {e}")
     raise HTTPException(
         status_code=500, detail=f"Грешка при създаване на склад: {str(e)}"
     )
@@ -125,6 +119,13 @@ def get_cars_summary():
       purchase_price = float(car.get("purchase_price") or 0)
       net_profit = total_sales - purchase_price
 
+      # Оформяне на заглавието за показване
+      car_title = (
+          f"{car.get('make', '')} {car.get('model', '')}".strip()
+          or car.get("title")
+          or "Без име"
+      )
+      car["title"] = car_title
       car["total_parts_val"] = total_parts_price
       car["total_sales"] = total_sales
       car["net_profit"] = net_profit
@@ -141,10 +142,11 @@ def get_cars_summary():
 def create_car(car: CarCreate):
   try:
     data = to_dict(car)
+    # Създаваме и title за съвместимост със стари записи
+    data["title"] = f"{car.make} {car.model}"
     res = supabase.table("cars").insert(data).execute()
     return res.data
   except Exception as e:
-    print(f"Грешка при добавяне на кола: {e}")
     raise HTTPException(
         status_code=500, detail=f"Грешка при добавяне на кола: {str(e)}"
     )
@@ -167,7 +169,6 @@ async def upload_photo(file: UploadFile = File(...)):
     )
     return {"photo_url": public_url}
   except Exception as e:
-    print(f"Грешка при качване на снимка: {e}")
     raise HTTPException(
         status_code=500, detail=f"Грешка при качване на снимка: {str(e)}"
     )
@@ -181,21 +182,26 @@ def create_part(part: PartCreate):
     res = supabase.table("parts").insert(data).execute()
     return res.data
   except Exception as e:
-    print(f"Грешка при създаване на част: {e}")
     raise HTTPException(
         status_code=500, detail=f"Грешка при създаване на част: {str(e)}"
     )
 
 
 @app.get("/parts/search")
-def search_parts(q: str = Query(..., min_length=2)):
+def search_parts(q: Optional[str] = Query(None)):
   try:
-    res = (
-        supabase.table("parts")
-        .select("*")
-        .or_(f"title.ilike.%{q}%,oem_number.ilike.%{q}%")
-        .execute()
-    )
+    # Заявка с връзка към таблицата cars (за марка и модел)
+    query = supabase.table("parts").select("*, cars(make, model, title)")
+
+    if q and q.strip():
+      search_term = f"%{q.strip()}%"
+      res = query.or_(
+          f"title.ilike.{search_term},oem_number.ilike.{search_term},compatible_models.ilike.{search_term}"
+      ).execute()
+    else:
+      # Ако няма търсена дума -> връща всички части
+      res = query.execute()
+
     return res.data or []
   except Exception as e:
     print("Грешка при търсене:", e)
@@ -211,7 +217,6 @@ def sell_part(part_id: int, sell_data: PartSell):
     )
     return res.data
   except Exception as e:
-    print(f"Грешка при продажба: {e}")
     raise HTTPException(
         status_code=500, detail=f"Грешка при продажба: {str(e)}"
     )
