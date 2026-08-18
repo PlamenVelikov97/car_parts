@@ -211,19 +211,30 @@
             name: document.getElementById('wh_name').value,
             address: document.getElementById('wh_address').value || null
         };
-
-        const res = await fetch('/warehouses', {  // <-- Без наклонена черта накрая
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-
-        if (!res.ok) {
-            const errorData = await res.json();
-            alert('Грешка при запазване: ' + (errorData.detail || 'Неизвестна грешка'));
-            return;
+    
+        try {
+            const res = await fetch('/warehouses', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+    
+            const result = await res.json();
+    
+            if (!res.ok) {
+                // Показва точната грешка от сървъра в изскачащ прозорец
+                alert('Грешка от сървъра: ' + JSON.stringify(result));
+                return;
+            }
+    
+            alert('Складът е добавен успешно!');
+            document.getElementById('wh_name').value = '';
+            document.getElementById('wh_address').value = '';
+            loadWarehouses();
+        } catch (err) {
+            alert('Мрежова грешка: ' + err.message);
         }
-
+    }
         alert('Складът е добавен успешно!');
         document.getElementById('wh_name').value = '';
         document.getElementById('wh_address').value = '';
