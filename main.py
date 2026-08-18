@@ -17,16 +17,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+try:
+  supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+  print(f"Грешка при иницииране на Supabase: {e}")
 
 
 class CarCreate(BaseModel):
   title: str
   purchase_price: float
-  warehouse_id: int
+  warehouse_id: Optional[int] = None
+
+
+class WarehouseCreate(BaseModel):
+  name: str
+  address: Optional[str] = None
 
 
 class PartCreate(BaseModel):
@@ -46,56 +54,90 @@ class PartSell(BaseModel):
 
 
 @app.get("/")
-def home():
-  return {"message": "API е онлайн!"}
+@app.get("/ui")
+def get_ui():
+  if not os.path.exists("index.html"):
+    raise HTTPException(status_code=404, detail="index.html не е намерен")
+  return FileResponse("index.html")
 
 
+@app.get("/warehouses")
 @app.get("/warehouses/")
 def get_warehouses():
-  res = supabase.table("warehouses").select("*").execute()
-  return res.data or []
+  try:
+    res = supabase.table("warehouses").select("*").execute()
+    return res.data or []
+  except Exception as e:
+    print("Грешка warehouses:", e)
+    return []
+
+
+@app.post("/warehouses")
+@app.post("/warehouses/")
+def create_warehouse(wh: WarehouseCreate):
+  try:
+    res = supabase.table("warehouses").insert(wh.dict()).execute()
+    return res.data
+  except Exception as e:
+    raise HTTPException(
+        status_code=500, detail=f"Грешка при създаване на склад: {str(e)}"
+    )
 
 
 @app.get("/cars/summary")
+@app.get("/cars/summary/")
 def get_cars_summary():
-  cars_res = supabase.table("cars").select("*").execute()
-  cars = cars_res.data or []
+  try:
+    cars_res = supabase.table("cars").select("*").execute()
+    cars = cars_res.data or []
 
-  for car in cars:
-    parts_res = (
-        supabase.table("parts")
-        .select("price, sold_price, status")
-        .eq("car_id", car["id"])
-        .execute()
-    )
-    parts = parts_res.data or []
+    for car in cars:
+      parts_res = (
+          supabase.table("parts")
+          .select("price, sold_price, status")
+          .eq("car_id", car["id"])
+          .execute()
+      )
+      parts = parts_res.data or []
 
-    total_parts_price = sum(
-        float(p.get("price") or 0) for p in parts if p.get("price") is not None
-    )
-    total_sales = sum(
-        float(p.get("sold_price") or 0)
-        for p in parts
-        if p.get("status") == "Продадено" and p.get("sold_price") is not None
-    )
+      total_parts_price = sum(
+          float(p.get("price") or 0)
+          for p in parts
+          if p.get("price") is not None
+      )
+      total_sales = sum(
+          float(p.get("sold_price") or 0)
+          for p in parts
+          if p.get("status") == "Продадено" and p.get("sold_price") is not None
+      )
 
-    purchase_price = float(car.get("purchase_price") or 0)
-    net_profit = total_sales - purchase_price
+      purchase_price = float(car.get("purchase_price") or 0)
+      net_profit = total_sales - purchase_price
 
-    car["total_parts_val"] = total_parts_price
-    car["total_sales"] = total_sales
-    car["net_profit"] = net_profit
-    car["parts_count"] = len(parts)
+      car["total_parts_val"] = total_parts_price
+      car["total_sales"] = total_sales
+      car["net_profit"] = net_profit
+      car["parts_count"] = len(parts)
 
-  return cars
+    return cars
+  except Exception as e:
+    print("Грешка cars summary:", e)
+    return []
 
 
+@app.post("/cars")
 @app.post("/cars/")
 def create_car(car: CarCreate):
-  res = supabase.table("cars").insert(car.dict()).execute()
-  return res.data
+  try:
+    res = supabase.table("cars").insert(car.dict()).execute()
+    return res.data
+  except Exception as e:
+    raise HTTPException(
+        status_code=500, detail=f"Грешка при добавяне на кола: {str(e)}"
+    )
 
 
+@app.post("/upload-photo")
 @app.post("/upload-photo/")
 async def upload_photo(file: UploadFile = File(...)):
   try:
@@ -117,33 +159,42 @@ async def upload_photo(file: UploadFile = File(...)):
     )
 
 
+@app.post("/parts")
 @app.post("/parts/")
 def create_part(part: PartCreate):
-  res = supabase.table("parts").insert(part.dict()).execute()
-  return res.data
+  try:
+    res = supabase.table("parts").insert(part.dict()).execute()
+    return res.data
+  except Exception as e:
+    raise HTTPException(
+        status_code=500, detail=f"Грешка при създаване на част: {str(e)}"
+    )
 
 
-# КОРИГИРАНО ТЪРСЕНЕ
 @app.get("/parts/search")
 def search_parts(q: str = Query(..., min_length=2)):
-  res = (
-      supabase.table("parts")
-      .select("*")
-      .or_(f"title.ilike.%{q}%,oem_number.ilike.%{q}%")
-      .execute()
-  )
-  return res.data or []
+  try:
+    res = (
+        supabase.table("parts")
+        .select("*")
+        .or_(f"title.ilike.%{q}%,oem_number.ilike.%{q}%")
+        .execute()
+    )
+    return res.data or []
+  except Exception as e:
+    print("Грешка search:", e)
+    return []
 
 
 @app.put("/parts/{part_id}/sell")
 def sell_part(part_id: int, sell_data: PartSell):
-  update_data = {"status": "Продадено", "sold_price": sell_data.sold_price}
-  res = supabase.table("parts").update(update_data).eq("id", part_id).execute()
-  return res.data
-
-
-@app.get("/ui")
-def get_ui():
-  if not os.path.exists("index.html"):
-    raise HTTPException(status_code=404, detail="index.html не е намерен")
-  return FileResponse("index.html")
+  try:
+    update_data = {"status": "Продадено", "sold_price": sell_data.sold_price}
+    res = (
+        supabase.table("parts").update(update_data).eq("id", part_id).execute()
+    )
+    return res.data
+  except Exception as e:
+    raise HTTPException(
+        status_code=500, detail=f"Грешка при продажба: {str(e)}"
+    )
