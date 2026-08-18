@@ -3,290 +3,344 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Авточасти & Двор</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Auto Parts Inventory</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-bottom: 50px; }
+        .card { border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .preview-img { max-width: 100px; max-height: 100px; object-fit: cover; border-radius: 8px; }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen pb-20">
+<body>
 
-    <header class="bg-blue-800 text-white p-4 sticky top-0 shadow-md z-10 flex justify-between items-center">
-        <h1 class="text-xl font-bold">🚗 Склад & Коли</h1>
-        <button onclick="loadAllData()" class="bg-blue-600 hover:bg-blue-700 text-xs text-white px-3 py-1 rounded shadow">🔄 Обнови</button>
-    </header>
+<div class="container mt-4">
+    <h2 class="text-center mb-4">🚗 Управление на Автоморги & Части</h2>
 
-    <main class="p-4 max-w-md mx-auto space-y-6">
+    <!-- ТАБОВЕ ЗА НАВИГАЦИЯ -->
+    <ul class="nav nav-pills nav-justified mb-4" id="mainTab" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active" id="search-tab" data-bs-toggle="tab" data-bs-target="#search-pane">🔍 Търсене</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="add-part-tab" data-bs-toggle="tab" data-bs-target="#add-part-pane">➕ Добави Част</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="cars-tab" data-bs-toggle="tab" data-bs-target="#cars-pane">🚘 Коли / Складове</button>
+        </li>
+    </ul>
 
-        <!-- 1. Търсачка за части -->
-        <section class="bg-white p-4 rounded-xl shadow">
-            <h2 class="text-lg font-bold mb-2">🔍 Бързо Търсене на Част</h2>
-            <div class="flex gap-2">
-                <input id="searchInput" type="text" placeholder="Напр: Скоростна кутия E36..." class="w-full border p-2 rounded-lg text-sm border-gray-300">
-                <button onclick="searchParts()" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold text-sm">Търси</button>
-            </div>
-            <div id="searchResults" class="mt-4 space-y-2"></div>
-        </section>
-
-        <!-- 2. Добавяне на Нова Кола -->
-        <section class="bg-white p-4 rounded-xl shadow border-l-4 border-green-500">
-            <h2 class="text-lg font-bold mb-2">➕ Добави Кола-Донор</h2>
-            <form id="carForm" onsubmit="addCar(event)" class="space-y-3">
-                <input type="text" id="carTitle" placeholder="Марка/Модел (напр. BMW E36 M50B20)" required class="w-full border p-2 rounded text-sm">
-                <div class="flex gap-2">
-                    <input type="number" id="carPrice" placeholder="Покупна цена (€)" required class="w-full border p-2 rounded text-sm">
-                    <select id="carWarehouse" class="w-full border p-2 rounded text-sm">
-                        <option value="">Зареждане...</option>
-                    </select>
+    <div class="tab-content" id="mainTabContent">
+        
+        <!-- 1. ТЪРСЕНЕ НА ЧАСТИ -->
+        <div class="tab-pane fade show active" id="search-pane">
+            <div class="card p-3 mb-4">
+                <h4>Търсене на авточаст</h4>
+                <div class="input-group">
+                    <input type="text" id="search-query" class="form-control" placeholder="Въведете име или OEM номер (мин. 2 букви)...">
+                    <button class="btn btn-primary" onclick="searchParts()">Търси</button>
                 </div>
-                <button type="submit" class="w-full bg-green-600 text-white py-2 rounded-lg font-bold text-sm">Запази Кола</button>
-            </form>
-        </section>
-
-        <!-- 3. СПИСЪК С КОЛИ & ФИНАНСОВ БАЛАНС -->
-        <section class="bg-white p-4 rounded-xl shadow">
-            <h2 class="text-lg font-bold mb-3 text-gray-800">📋 Налични Коли-Донори</h2>
-            <div id="carsList" class="space-y-3">
-                <p class="text-xs text-gray-500">Зареждане на колите...</p>
             </div>
-        </section>
+            <div id="search-results"></div>
+        </div>
 
-        <!-- 4. Сканиране & Записване на Част -->
-        <section class="bg-white p-4 rounded-xl shadow border-l-4 border-purple-500">
-            <h2 class="text-lg font-bold mb-2">📷 Записване на Част</h2>
+        <!-- 2. ДОБАВЯНЕ НА ЧАСТ -->
+        <div class="tab-pane fade" id="add-part-pane">
+            <div class="card p-4">
+                <h4>Добавяне на нова част</h4>
+                <form id="part-form" onsubmit="savePart(event)">
+                    <div class="mb-3">
+                        <label class="form-label">Наименование на частта *</label>
+                        <input type="text" id="part_title" class="form-control" required placeholder="напр. Предна броня">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">OEM Номер</label>
+                            <input type="text" id="part_oem" class="form-control" placeholder="напр. 8K0807225">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Цена (лв.) *</label>
+                            <input type="number" step="0.01" id="part_price" class="form-control" required placeholder="150.00">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Избери Кола</label>
+                            <select id="part_car_id" class="form-select">
+                                <option value="">-- Избери Кола --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Място / Склад</label>
+                            <input type="text" id="part_shelf" class="form-control" placeholder="напр. Рафт A-12">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Снимка (От камера или галерия)</label>
+                        <input type="file" id="part_photo_file" class="form-control" accept="image/*" capture="environment">
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">Запази Частта</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 3. УПРАВЛЕНИЕ НА СКТАДОВЕ И КОЛИ -->
+        <div class="tab-pane fade" id="cars-pane">
+            <div class="row">
+                <!-- ДОБАВЯНЕ НА СКЛАД -->
+                <div class="col-md-6 mb-4">
+                    <div class="card p-3">
+                        <h5>🏭 Добави Нов Склад</h5>
+                        <form onsubmit="saveWarehouse(event)">
+                            <div class="mb-2">
+                                <input type="text" id="wh_name" class="form-control" placeholder="Име на склад (напр. Заден двор)" required>
+                            </div>
+                            <div class="mb-2">
+                                <input type="text" id="wh_address" class="form-control" placeholder="Адрес / Бележка">
+                            </div>
+                            <button type="submit" class="btn btn-outline-primary btn-sm w-100">Създай Склад</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- ДОБАВЯНЕ НА КОЛА -->
+                <div class="col-md-6 mb-4">
+                    <div class="card p-3">
+                        <h5>🚗 Добави Нова Кола-Донор</h5>
+                        <form onsubmit="saveCar(event)">
+                            <div class="mb-2">
+                                <input type="text" id="car_title" class="form-control" placeholder="Марка и модел (напр. Audi A4 B8 2.0 TDI)" required>
+                            </div>
+                            <div class="mb-2">
+                                <input type="number" step="0.01" id="car_purchase_price" class="form-control" placeholder="Покупна цена (лв.)" required>
+                            </div>
+                            <div class="mb-2">
+                                <select id="car_warehouse_id" class="form-select" required>
+                                    <option value="">-- Избери Склад --</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-outline-success btn-sm w-100">Запази Колата</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- СПИСЪК С КОЛИ И БАЛАНС -->
+            <div class="card p-3">
+                <h5>📊 Налични Коли и Финансов Баланс</h5>
+                <div id="cars-summary-list" class="mt-3">
+                    <p class="text-muted">Зареждане на данните...</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    // Зареждане на първоначалните данни при отваряне
+    document.addEventListener("DOMContentLoaded", function() {
+        loadWarehouses();
+        loadCars();
+        loadCarsSummary();
+    });
+
+    // 1. Зареждане на складовете в падащите менюта
+    async function loadWarehouses() {
+        try {
+            const res = await fetch('/warehouses/');
+            const warehouses = await res.json();
+            const select = document.getElementById('car_warehouse_id');
+            select.innerHTML = '<option value="">-- Избери Склад --</option>';
+            warehouses.forEach(w => {
+                select.innerHTML += `<option value="${w.id}">${w.name}</option>`;
+            });
+        } catch (e) {
+            console.error("Грешка при складове:", e);
+        }
+    }
+
+    // 2. Зареждане на колите в падащото меню за части
+    async function loadCars() {
+        try {
+            const res = await fetch('/cars/summary');
+            const cars = await res.json();
+            const select = document.getElementById('part_car_id');
+            select.innerHTML = '<option value="">-- Без конкретна кола --</option>';
+            cars.forEach(c => {
+                select.innerHTML += `<option value="${c.id}">${c.title}</option>`;
+            });
+        } catch (e) {
+            console.error("Грешка при коли:", e);
+        }
+    }
+
+    // 3. Зареждане на финансовия баланс за колите
+    async function loadCarsSummary() {
+        const container = document.getElementById('cars-summary-list');
+        try {
+            const res = await fetch('/cars/summary');
+            const cars = await res.json();
+            if (cars.length === 0) {
+                container.innerHTML = '<p class="text-muted">Все още няма въведени коли.</p>';
+                return;
+            }
+            container.innerHTML = '';
+            cars.forEach(c => {
+                const profitClass = c.net_profit >= 0 ? 'text-success' : 'text-danger';
+                container.innerHTML += `
+                    <div class="border rounded p-3 mb-2 bg-light">
+                        <h6>🚗 <strong>${c.title}</strong></h6>
+                        <div class="row text-center mt-2">
+                            <div class="col-4"><small class="text-muted">Покупка</small><br><strong>${c.purchase_price} лв.</strong></div>
+                            <div class="col-4"><small class="text-muted">Продажби</small><br><strong class="text-primary">${c.total_sales} лв.</strong></div>
+                            <div class="col-4"><small class="text-muted">Печалба/Загуба</small><br><strong class="${profitClass}">${c.net_profit} лв.</strong></div>
+                        </div>
+                    </div>`;
+            });
+        } catch (e) {
+            container.innerHTML = '<p class="text-danger">Грешка при зареждане на баланса.</p>';
+        }
+    }
+
+    // 4. Запазване на Склад
+    async function saveWarehouse(e) {
+        e.preventDefault();
+        const data = {
+            name: document.getElementById('wh_name').value,
+            address: document.getElementById('wh_address').value
+        };
+        await fetch('/warehouses/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        alert('Складът е добавен успешно!');
+        document.getElementById('wh_name').value = '';
+        document.getElementById('wh_address').value = '';
+        loadWarehouses();
+    }
+
+    // 5. Запазване на Кола
+    async function saveCar(e) {
+        e.preventDefault();
+        const data = {
+            title: document.getElementById('car_title').value,
+            purchase_price: parseFloat(document.getElementById('car_purchase_price').value),
+            warehouse_id: parseInt(document.getElementById('car_warehouse_id').value)
+        };
+        await fetch('/cars/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        alert('Колата е добавена успешно!');
+        document.getElementById('car_title').value = '';
+        document.getElementById('car_purchase_price').value = '';
+        loadCars();
+        loadCarsSummary();
+    }
+
+    // 6. Запазване на Част (с качване на снимка)
+    async function savePart(e) {
+        e.preventDefault();
+        let photo_url = null;
+
+        const fileInput = document.getElementById('part_photo_file');
+        if (fileInput.files.length > 0) {
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
             
-            <form id="partForm" onsubmit="addPart(event)" class="space-y-3">
-                
-                <!-- БУТОН ЗА КАМЕРА -->
-                <div class="bg-purple-50 border-2 border-dashed border-purple-300 p-3 rounded-lg text-center">
-                    <label for="cameraInput" class="cursor-pointer block text-sm font-bold text-purple-700">
-                        📸 Натисни тук за снимка
-                    </label>
-                    <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="previewFile()" class="hidden">
-                    <p id="fileName" class="text-xs text-gray-500 mt-1">Няма избрана снимка</p>
-                </div>
+            const uploadRes = await fetch('/upload-photo/', {
+                method: 'POST',
+                body: formData
+            });
+            if (uploadRes.ok) {
+                const uploadData = await uploadRes.json();
+                photo_url = uploadData.photo_url;
+            }
+        }
 
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-1">Към коя кола принадлежи?</label>
-                    <select id="partCarSelect" class="w-full border p-2 rounded text-sm bg-purple-50">
-                        <option value="">Без кола (Обща част)</option>
-                    </select>
-                </div>
-
-                <input type="text" id="partTitle" placeholder="Име на частта (напр. Стартер)" required class="w-full border p-2 rounded text-sm">
-                <input type="text" id="partOem" placeholder="OEM / Сериен номер (по избор)" class="w-full border p-2 rounded text-sm">
-                
-                <div class="flex gap-2">
-                    <input type="number" id="partPrice" placeholder="Цена (€)" required class="w-full border p-2 rounded text-sm">
-                    <select id="partStatus" class="w-full border p-2 rounded text-sm">
-                        <option value="На колата">🚗 На колата</option>
-                        <option value="На рафт">📦 На рафт</option>
-                    </select>
-                </div>
-
-                <input type="text" id="partShelf" placeholder="Локация / Рафт (напр. Рафт A-2)" class="w-full border p-2 rounded text-sm">
-                <button type="submit" id="savePartBtn" class="w-full bg-purple-600 text-white py-2 rounded-lg font-bold text-sm">Запази Част</button>
-            </form>
-        </section>
-
-    </main>
-
-    <script>
-        const API_URL = "";
-
-        window.onload = function() {
-            loadAllData();
+        const car_id_val = document.getElementById('part_car_id').value;
+        const partData = {
+            title: document.getElementById('part_title').value,
+            oem_number: document.getElementById('part_oem').value || null,
+            price: parseFloat(document.getElementById('part_price').value),
+            shelf_location: document.getElementById('part_shelf').value || null,
+            car_id: car_id_val ? parseInt(car_id_val) : null,
+            photo_url: photo_url
         };
 
-        function loadAllData() {
-            loadWarehouses();
-            loadCarsSummary();
+        await fetch('/parts/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(partData)
+        });
+
+        alert('Частта е добавена успешно!');
+        document.getElementById('part-form').reset();
+        loadCarsSummary();
+    }
+
+    // 7. Търсене на Части
+    async function searchParts() {
+        const query = document.getElementById('search-query').value;
+        if (query.length < 2) {
+            alert('Моля, въведете поне 2 символа за търсене.');
+            return;
         }
 
-        function previewFile() {
-            const input = document.getElementById('cameraInput');
-            const fileName = document.getElementById('fileName');
-            if (input.files.length > 0) {
-                fileName.innerText = "Избрана снимка: " + input.files[0].name;
-            }
-        }
+        const container = document.getElementById('search-results');
+        container.innerHTML = '<p class="text-muted">Търсене...</p>';
 
-        async function loadWarehouses() {
-            try {
-                const res = await fetch(`${API_URL}/warehouses/`);
-                const warehouses = await res.json();
-                const select = document.getElementById("carWarehouse");
-                select.innerHTML = "";
-                
-                if (warehouses.length === 0) {
-                    select.innerHTML = `<option value="">Няма складове</option>`;
-                    return;
-                }
+        try {
+            const res = await fetch(`/parts/search?q=${encodeURIComponent(query)}`);
+            const parts = await res.json();
 
-                warehouses.forEach(w => {
-                    select.innerHTML += `<option value="${w.id}">${w.name}</option>`;
-                });
-            } catch (err) {
-                console.error("Грешка складове:", err);
-            }
-        }
-
-        async function loadCarsSummary() {
-            try {
-                const res = await fetch(`${API_URL}/cars/summary`);
-                const cars = await res.json();
-                
-                const carsListDiv = document.getElementById("carsList");
-                const partCarSelect = document.getElementById("partCarSelect");
-                
-                carsListDiv.innerHTML = "";
-                partCarSelect.innerHTML = `<option value="">Без кола (Обща част)</option>`;
-
-                if (cars.length === 0) {
-                    carsListDiv.innerHTML = "<p class='text-xs text-gray-500'>Все още няма добавени коли.</p>";
-                    return;
-                }
-
-                cars.forEach(car => {
-                    partCarSelect.innerHTML += `<option value="${car.id}">${car.title}</option>`;
-
-                    const profitClass = car.net_profit >= 0 ? "text-green-600" : "text-red-600";
-                    const profitSign = car.net_profit >= 0 ? "+" : "";
-
-                    carsListDiv.innerHTML += `
-                        <div class="border rounded-lg p-3 bg-gray-50 space-y-1">
-                            <div class="flex justify-between items-start">
-                                <span class="font-bold text-gray-900 text-sm">${car.title}</span>
-                                <span class="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold">Купена: ${car.purchase_price} €</span>
-                            </div>
-                            <div class="text-xs text-gray-600 flex justify-between">
-                                <span>Брой Части: <b>${car.parts_count}</b></span>
-                                <span>Продадени за: <b>${car.total_sales} €</b></span>
-                            </div>
-                            <div class="text-xs font-bold pt-1 border-t flex justify-between">
-                                <span>Финансов баланс:</span>
-                                <span class="${profitClass}">${profitSign}${car.net_profit} €</span>
-                            </div>
-                        </div>
-                    `;
-                });
-            } catch (err) {
-                console.error("Грешка коли:", err);
-            }
-        }
-
-        async function searchParts() {
-            const query = document.getElementById("searchInput").value;
-            if (!query) return;
-
-            const res = await fetch(`${API_URL}/parts/search?q=${query}`);
-            const data = await res.json();
-            
-            const resultsDiv = document.getElementById("searchResults");
-            resultsDiv.innerHTML = "";
-
-            if (data.length === 0) {
-                resultsDiv.innerHTML = "<p class='text-xs text-gray-500'>Няма намерени части.</p>";
+            if (parts.length === 0) {
+                container.innerHTML = '<p class="text-muted">Няма намерени части.</p>';
                 return;
             }
 
-            data.forEach(part => {
-                const imgHtml = part.photo_url ? `<img src="${part.photo_url}" class="w-full h-32 object-cover rounded mb-2">` : '';
-                resultsDiv.innerHTML += `
-                    <div class="border p-3 rounded-lg bg-gray-50 space-y-1">
-                        ${imgHtml}
-                        <div class="font-bold text-sm text-blue-900">${part.title}</div>
-                        <div class="text-xs text-gray-600">OEM: ${part.oem_number || 'Няма'} | Локация: ${part.shelf_location || part.status}</div>
-                        <div class="text-xs font-bold text-green-600">Обявена цена: ${part.price} €</div>
-                        ${part.status !== 'Продадено' ? 
-                          `<button onclick="sellPart(${part.id})" class="mt-2 text-xs bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded font-bold">💰 Отчети продажба</button>` : 
-                          `<div class="text-xs font-bold text-red-600">[ПРОДАДЕНО за ${part.sold_price || part.price} €]</div>`}
-                    </div>
-                `;
+            container.innerHTML = '';
+            parts.forEach(p => {
+                const imgTag = p.photo_url ? `<img src="${p.photo_url}" class="preview-img me-3">` : '';
+                container.innerHTML += `
+                    <div class="card p-3 mb-2 d-flex flex-row align-items-center">
+                        ${imgTag}
+                        <div class="flex-grow-1">
+                            <h5 class="mb-1">${p.title}</h5>
+                            <p class="mb-1 text-muted"><small>OEM: ${p.oem_number || 'Няма'} | Място: ${p.shelf_location || 'Няма'}</small></p>
+                            <span class="badge bg-${p.status === 'Продадено' ? 'danger' : 'success'}">${p.status}</span>
+                        </div>
+                        <div class="text-end">
+                            <h4 class="text-primary mb-2">${p.price} лв.</h4>
+                            ${p.status !== 'Продадено' ? `<button class="btn btn-sm btn-outline-danger" onclick="sellPart(${p.id})">Маркирай Продадена</button>` : ''}
+                        </div>
+                    </div>`;
             });
+        } catch (e) {
+            container.innerHTML = '<p class="text-danger">Грешка при търсенето.</p>';
         }
+    }
 
-        async function addCar(e) {
-            e.preventDefault();
-            const body = {
-                title: document.getElementById("carTitle").value,
-                purchase_price: parseFloat(document.getElementById("carPrice").value),
-                warehouse_id: parseInt(document.getElementById("carWarehouse").value)
-            };
+    // 8. Маркиране на част като продадена
+    async function sellPart(partId) {
+        const price = prompt("Въведете крайната цена, на която е продадена частта (лв.):");
+        if (!price) return;
 
-            await fetch(`${API_URL}/cars/`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body)
-            });
+        await fetch(`/parts/${partId}/sell`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ sold_price: parseFloat(price) })
+        });
 
-            alert("Колата е добавена успешно!");
-            document.getElementById("carForm").reset();
-            loadAllData();
-        }
+        alert('Частта е маркирана като продадена!');
+        searchParts();
+        loadCarsSummary();
+    }
+</script>
 
-        async function addPart(e) {
-            e.preventDefault();
-            const saveBtn = document.getElementById("savePartBtn");
-            saveBtn.innerText = "Качване...";
-            saveBtn.disabled = true;
-
-            let uploadedPhotoUrl = null;
-            const cameraInput = document.getElementById("cameraInput");
-
-            // Ако е избрана снимка - първо я качваме в Supabase
-            if (cameraInput.files.length > 0) {
-                const formData = new FormData();
-                formData.append("file", cameraInput.files[0]);
-
-                try {
-                    const uploadRes = await fetch(`${API_URL}/upload-photo/`, {
-                        method: "POST",
-                        body: formData
-                    });
-                    const uploadData = await uploadRes.json();
-                    uploadedPhotoUrl = uploadData.photo_url;
-                } catch (err) {
-                    console.error("Грешка при качване на снимката:", err);
-                }
-            }
-
-            const carIdVal = document.getElementById("partCarSelect").value;
-            const body = {
-                title: document.getElementById("partTitle").value,
-                oem_number: document.getElementById("partOem").value,
-                price: parseFloat(document.getElementById("partPrice").value),
-                status: document.getElementById("partStatus").value,
-                shelf_location: document.getElementById("partShelf").value,
-                car_id: carIdVal ? parseInt(carIdVal) : null,
-                photo_url: uploadedPhotoUrl
-            };
-
-            await fetch(`${API_URL}/parts/`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body)
-            });
-
-            alert("Частта е запазена успешно!");
-            document.getElementById("partForm").reset();
-            document.getElementById("fileName").innerText = "Няма избрана снимка";
-            saveBtn.innerText = "Запази Част";
-            saveBtn.disabled = false;
-            loadCarsSummary();
-        }
-
-        async function sellPart(partId) {
-            const soldPrice = prompt("Въведете сумата, за която я продадохте (€):");
-            if (!soldPrice) return;
-
-            await fetch(`${API_URL}/parts/${partId}/sell`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ sold_price: parseFloat(soldPrice) })
-            });
-
-            alert("Продажбата е отчетена успешно!");
-            searchParts();
-            loadCarsSummary();
-        }
-    </script>
 </body>
 </html>
