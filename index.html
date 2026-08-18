@@ -35,8 +35,8 @@
         <div class="tab-pane fade show active" id="search-pane">
             <div class="card p-3 mb-4">
                 <h4>Търсене на авточаст или кола</h4>
-                <div class="row g-2 mb-2">
-                    <div class="col-md-5">
+                <div class="row g-2 mb-2 align-items-center">
+                    <div class="col-md-4">
                         <input type="text" id="search-query" class="form-control" placeholder="Търси по име на част, OEM или рафт...">
                     </div>
                     <div class="col-md-3">
@@ -49,8 +49,8 @@
                             <option value="">-- Всички модели --</option>
                         </select>
                     </div>
-                    <div class="col-md-1">
-                        <button class="btn btn-primary w-100" onclick="searchParts()">Търси</button>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary w-100 fw-bold py-2" onclick="searchParts()">🔍 Търси</button>
                     </div>
                 </div>
             </div>
@@ -235,18 +235,25 @@
 
     async function editWarehouse(id, oldName, oldAddress) {
         const newName = prompt("Въведете ново име за склада:", oldName);
-        if (!newName) return;
-        const newAddress = prompt("Въведете нов адрес (по желание):", oldAddress);
+        if (newName === null) return;
+
+        const newAddress = prompt("Въведете нов адрес:", oldAddress || '');
+        if (newAddress === null) return;
 
         try {
             const res = await fetch(`/warehouses/${id}`, {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ name: newName, address: newAddress || null })
+                body: JSON.stringify({ 
+                    name: newName.trim() !== '' ? newName : oldName, 
+                    address: newAddress.trim() !== '' ? newAddress : null 
+                })
             });
             if (res.ok) {
                 alert('Складът е обновен!');
                 loadWarehouses();
+            } else {
+                alert('Грешка при запис на промените.');
             }
         } catch (err) {
             alert('Грешка при преименуване: ' + err.message);
@@ -279,7 +286,6 @@
                 select.innerHTML += `<option value="${c.id}">${c.title}</option>`;
             });
 
-            // Попълваме менюто за Марки в Търсачката
             populateMakeDropdown();
         } catch (e) {
             console.error("Грешка при коли:", e);
@@ -330,10 +336,15 @@
             container.innerHTML = '';
             cars.forEach(c => {
                 const profitClass = c.net_profit >= 0 ? 'text-success' : 'text-danger';
+                const warehouseName = c.warehouses ? c.warehouses.name : 'Неопределен склад';
+
                 container.innerHTML += `
                     <div class="border rounded p-3 mb-2 bg-light">
                         <div class="d-flex justify-content-between align-items-center">
-                            <h6>🚗 <strong>${c.title}</strong></h6>
+                            <div>
+                                <h6>🚗 <strong>${c.title}</strong></h6>
+                                <small class="text-muted">🏭 Склад: <strong>${warehouseName}</strong></small>
+                            </div>
                             <div>
                                 <button class="btn btn-sm btn-success me-1" onclick="quickSellPartFromCar(${c.id}, '${c.title}')">⚡ Свали & Продай Част</button>
                                 <button class="btn btn-sm btn-outline-secondary me-1" onclick="editCar(${c.id}, '${c.make || ''}', '${c.model || ''}', ${c.purchase_price}, ${c.warehouse_id})">✏️</button>
@@ -434,27 +445,32 @@
     }
 
     async function editCar(id, oldMake, oldModel, oldPrice, oldWhId) {
-        const newMake = prompt("Марка:", oldMake);
-        if (!newMake) return;
-        const newModel = prompt("Модел:", oldModel);
-        if (!newModel) return;
-        const newPrice = prompt("Покупна цена (лв.):", oldPrice);
+        const newMake = prompt("Въведете марка:", oldMake);
+        if (newMake === null) return;
+
+        const newModel = prompt("Въведете модел:", oldModel);
+        if (newModel === null) return;
+
+        const newPrice = prompt("Въведете покупна цена (лв.):", oldPrice);
+        if (newPrice === null) return;
 
         try {
             const res = await fetch(`/cars/${id}`, {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    make: newMake,
-                    model: newModel,
-                    purchase_price: parseFloat(newPrice || oldPrice),
+                    make: newMake.trim() !== '' ? newMake : oldMake,
+                    model: newModel.trim() !== '' ? newModel : oldModel,
+                    purchase_price: parseFloat(newPrice) || oldPrice,
                     warehouse_id: oldWhId
                 })
             });
             if (res.ok) {
-                alert('Колата е обновена!');
+                alert('Колата е обновена успешно!');
                 loadCars();
                 loadCarsSummary();
+            } else {
+                alert('Грешка при обновяване на колата.');
             }
         } catch (err) {
             alert('Грешка при редакция: ' + err.message);
@@ -555,16 +571,22 @@
             container.innerHTML = '';
             filteredParts.forEach(p => {
                 const imgTag = p.photo_url ? `<img src="${p.photo_url}" class="preview-img me-3">` : '';
+                
                 let carInfo = 'Обща част';
+                let carWarehouse = '';
+
                 if (p.cars) {
                     carInfo = `${p.cars.make || ''} ${p.cars.model || ''}`.trim() || p.cars.title || 'Кола';
+                    if (p.cars.warehouses && p.cars.warehouses.name) {
+                        carWarehouse = ` | 🏭 Склад: <strong>${p.cars.warehouses.name}</strong>`;
+                    }
                 }
 
                 container.innerHTML += `
                     <div class="card p-3 mb-2 d-flex flex-row align-items-center">
                         ${imgTag}
                         <div class="flex-grow-1">
-                            <h5 class="mb-1">${p.title} <small class="text-primary">(${carInfo})</small></h5>
+                            <h5 class="mb-1">${p.title} <small class="text-primary">(${carInfo}${carWarehouse})</small></h5>
                             <p class="mb-1 text-muted"><small>OEM: ${p.oem_number || 'Няма'} | Място: ${p.shelf_location || 'Няма'}</small></p>
                             <span class="badge bg-${p.status === 'Продадено' ? 'danger' : 'success'}">${p.status}</span>
                         </div>
