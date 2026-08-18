@@ -93,3 +93,20 @@ def sell_part(part_id: int, sell_data: PartSell):
     }
     response = supabase.table("parts").update(update_data).eq("id", part_id).execute()
     return response.data
+
+
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+
+# Разрешаваме достъп от мобилни устройства (CORS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/ui")
+def get_ui():
+  return FileResponse("index.html")
