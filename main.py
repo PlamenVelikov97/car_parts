@@ -96,7 +96,6 @@ def create_car(car: CarCreate):
   return res.data
 
 
-# Качване на снимка в Supabase Storage
 @app.post("/upload-photo/")
 async def upload_photo(file: UploadFile = File(...)):
   try:
@@ -104,12 +103,10 @@ async def upload_photo(file: UploadFile = File(...)):
     file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
     file_name = f"{uuid.uuid4()}.{file_ext}"
 
-    # Качване в Supabase bucket 'parts-photos'
     res = supabase.storage.from_("parts-photos").upload(
         file_name, file_bytes, {"content-type": file.content_type}
     )
 
-    # Вземане на публичния URL адрес на снимката
     public_url = supabase.storage.from_("parts-photos").get_public_url(
         file_name
     )
@@ -126,14 +123,13 @@ def create_part(part: PartCreate):
   return res.data
 
 
+# КОРИГИРАНО ТЪРСЕНЕ
 @app.get("/parts/search")
 def search_parts(q: str = Query(..., min_length=2)):
   res = (
       supabase.table("parts")
-      .select("*, warehouses(name), cars(title)")
-      .or_(
-          f"title.ilike.%{q}%,oem_number.ilike.%{q}%,compatible_models.ilike.%{q}%"
-      )
+      .select("*")
+      .or_(f"title.ilike.%{q}%,oem_number.ilike.%{q}%")
       .execute()
   )
   return res.data or []
@@ -151,4 +147,3 @@ def get_ui():
   if not os.path.exists("index.html"):
     raise HTTPException(status_code=404, detail="index.html не е намерен")
   return FileResponse("index.html")
-    
