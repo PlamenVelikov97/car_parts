@@ -164,6 +164,26 @@
         function previewImage(event) {
             alert("Снимката е заснета! (Можеш да я качиш към бекенда)");
         }
+
+        async function loadWarehouses() {
+            try {
+                const res = await fetch(`${API_URL}/warehouses/`);
+                const warehouses = await res.json();
+                const select = document.getElementById("carWarehouse");
+                select.innerHTML = "";
+        
+                warehouses.forEach(w => {
+                    select.innerHTML += `<option value="${w.id}">${w.name}</option>`;
+                });
+            } catch (err) {
+                console.error("Грешка при зареждане на складовете:", err);
+            }
+        }
+
+        // Извиква се при зареждане на страницата
+        window.onload = loadWarehouses;
+
+        
     </script>
 </body>
 </html>
