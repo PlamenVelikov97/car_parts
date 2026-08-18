@@ -1,6 +1,7 @@
 import os
+import uuid
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -8,7 +9,6 @@ from supabase import Client, create_client
 
 app = FastAPI(title="Auto Parts Inventory API")
 
-# Разрешаваме достъп от мобилни устройства (CORS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,14 +17,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Връзка със Supabase през Environment Variables
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
-# Pydantic модели
 class CarCreate(BaseModel):
   title: str
   purchase_price: float
@@ -47,10 +45,9 @@ class PartSell(BaseModel):
   sold_price: float
 
 
-# Ендпойнти
 @app.get("/")
 def home():
-  return {"message": "Auto Parts Inventory API е онлайн!"}
+  return {"message": "API е онлайн!"}
 
 
 @app.get("/warehouses/")
@@ -99,6 +96,30 @@ def create_car(car: CarCreate):
   return res.data
 
 
+# Качване на снимка в Supabase Storage
+@app.post("/upload-photo/")
+async def upload_photo(file: UploadFile = File(...)):
+  try:
+    file_bytes = await file.read()
+    file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    file_name = f"{uuid.uuid4()}.{file_ext}"
+
+    # Качване в Supabase bucket 'parts-photos'
+    res = supabase.storage.from_("parts-photos").upload(
+        file_name, file_bytes, {"content-type": file.content_type}
+    )
+
+    # Вземане на публичния URL адрес на снимката
+    public_url = supabase.storage.from_("parts-photos").get_public_url(
+        file_name
+    )
+    return {"photo_url": public_url}
+  except Exception as e:
+    raise HTTPException(
+        status_code=500, detail=f"Грешка при качване на снимка: {str(e)}"
+    )
+
+
 @app.post("/parts/")
 def create_part(part: PartCreate):
   res = supabase.table("parts").insert(part.dict()).execute()
@@ -128,7 +149,5 @@ def sell_part(part_id: int, sell_data: PartSell):
 @app.get("/ui")
 def get_ui():
   if not os.path.exists("index.html"):
-    raise HTTPException(
-        status_code=404, detail="index.html не е намерен в основната папка"
-    )
+    raise HTTPException(status_code=404, detail="index.html не е намерен")
   return FileResponse("index.html")
