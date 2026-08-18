@@ -23,14 +23,17 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
+# --- PYDANTIC МОДЕЛИ ---
+
+
 class WarehouseCreate(BaseModel):
   name: str
   address: Optional[str] = None
 
 
 class CarCreate(BaseModel):
-  make: str  # Марка (напр. Audi)
-  model: str  # Модел (напр. A4 B8)
+  make: str
+  model: str
   purchase_price: float
   warehouse_id: Optional[int] = None
 
@@ -57,12 +60,18 @@ def to_dict(model: BaseModel) -> dict:
   return model.dict()
 
 
+# --- РУТОВЕ ЗА ИНТЕРФЕЙС ---
+
+
 @app.get("/")
 @app.get("/ui")
 def get_ui():
   if not os.path.exists("index.html"):
     raise HTTPException(status_code=404, detail="index.html не е намерен")
   return FileResponse("index.html")
+
+
+# --- СКЛАДОВЕ (Warehouses) ---
 
 
 @app.get("/warehouses")
@@ -87,6 +96,32 @@ def create_warehouse(wh: WarehouseCreate):
     raise HTTPException(
         status_code=500, detail=f"Грешка при създаване на склад: {str(e)}"
     )
+
+
+@app.put("/warehouses/{wh_id}")
+def update_warehouse(wh_id: int, wh: WarehouseCreate):
+  try:
+    data = to_dict(wh)
+    res = supabase.table("warehouses").update(data).eq("id", wh_id).execute()
+    return res.data
+  except Exception as e:
+    raise HTTPException(
+        status_code=500, detail=f"Грешка при дублиране/редакция: {str(e)}"
+    )
+
+
+@app.delete("/warehouses/{wh_id}")
+def delete_warehouse(wh_id: int):
+  try:
+    res = supabase.table("warehouses").delete().eq("id", wh_id).execute()
+    return {"message": "Складът е изтрит успешно", "data": res.data}
+  except Exception as e:
+    raise HTTPException(
+        status_code=500, detail=f"Грешка при изтриване на склад: {str(e)}"
+    )
+
+
+# --- КОЛИ (Cars) ---
 
 
 @app.get("/cars/summary")
@@ -119,7 +154,6 @@ def get_cars_summary():
       purchase_price = float(car.get("purchase_price") or 0)
       net_profit = total_sales - purchase_price
 
-      # Оформяне на заглавието за показване
       car_title = (
           f"{car.get('make', '')} {car.get('model', '')}".strip()
           or car.get("title")
@@ -142,7 +176,6 @@ def get_cars_summary():
 def create_car(car: CarCreate):
   try:
     data = to_dict(car)
-    # Създаваме и title за съвместимост със стари записи
     data["title"] = f"{car.make} {car.model}"
     res = supabase.table("cars").insert(data).execute()
     return res.data
@@ -150,6 +183,33 @@ def create_car(car: CarCreate):
     raise HTTPException(
         status_code=500, detail=f"Грешка при добавяне на кола: {str(e)}"
     )
+
+
+@app.put("/cars/{car_id}")
+def update_car(car_id: int, car: CarCreate):
+  try:
+    data = to_dict(car)
+    data["title"] = f"{car.make} {car.model}"
+    res = supabase.table("cars").update(data).eq("id", car_id).execute()
+    return res.data
+  except Exception as e:
+    raise HTTPException(
+        status_code=500, detail=f"Грешка при редакция на кола: {str(e)}"
+    )
+
+
+@app.delete("/cars/{car_id}")
+def delete_car(car_id: int):
+  try:
+    res = supabase.table("cars").delete().eq("id", car_id).execute()
+    return {"message": "Колата е изтрита успешно", "data": res.data}
+  except Exception as e:
+    raise HTTPException(
+        status_code=500, detail=f"Грешка при изтриване на кола: {str(e)}"
+    )
+
+
+# --- ЧАСТИ & СНИМКИ (Parts & Photos) ---
 
 
 @app.post("/upload-photo")
@@ -163,7 +223,6 @@ async def upload_photo(file: UploadFile = File(...)):
     res = supabase.storage.from_("parts-photos").upload(
         file_name, file_bytes, {"content-type": file.content_type}
     )
-
     public_url = supabase.storage.from_("parts-photos").get_public_url(
         file_name
     )
@@ -189,22 +248,30 @@ def create_part(part: PartCreate):
 
 @app.get("/parts/search")
 def search_parts(q: Optional[str] = Query(None)):
+  search_val = q.strip() if q and q.strip() else ""
+
+  # 1. Опит за търсене чрез PostgreSQL функцията search_parts_and_cars
   try:
-    # Заявка с връзка към таблицата cars (за марка и модел)
-    query = supabase.table("parts").select("*, cars(make, model, title)")
-
-    if q and q.strip():
-      search_term = f"%{q.strip()}%"
-      res = query.or_(
-          f"title.ilike.{search_term},oem_number.ilike.{search_term},compatible_models.ilike.{search_term}"
-      ).execute()
-    else:
-      # Ако няма търсена дума -> връща всички части
-      res = query.execute()
-
+    res = supabase.rpc(
+        "search_parts_and_cars", {"search_term": search_val}
+    ).execute()
     return res.data or []
   except Exception as e:
-    print("Грешка при търсене:", e)
+    print("RPC търсенето не успя, преминаване към стандартна заявка:", e)
+
+  # 2. Fallback вариант към стандартна заявка
+  try:
+    query = supabase.table("parts").select("*, cars(make, model, title)")
+    if search_val:
+      term = f"%{search_val}%"
+      res = query.or_(
+          f"title.ilike.{term},oem_number.ilike.{term},compatible_models.ilike.{term}"
+      ).execute()
+    else:
+      res = query.execute()
+    return res.data or []
+  except Exception as inner_e:
+    print("Грешка при търсене на части:", inner_e)
     return []
 
 
