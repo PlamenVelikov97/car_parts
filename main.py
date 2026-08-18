@@ -109,3 +109,9 @@ def sell_part(part_id: int, sell_data: PartSell):
 @app.get("/ui")
 def get_ui():
   return FileResponse("index.html")
+
+# Вземане на всички складове за падащото меню
+@app.get("/warehouses/")
+def get_warehouses():
+  response = supabase.table("warehouses").select("*").execute()
+  return response.data
