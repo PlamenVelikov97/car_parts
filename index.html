@@ -35,9 +35,23 @@
         <div class="tab-pane fade show active" id="search-pane">
             <div class="card p-3 mb-4">
                 <h4>Търсене на авточаст или кола</h4>
-                <div class="input-group">
-                    <input type="text" id="search-query" class="form-control" placeholder="Натиснете Търси за всички части или въведете име, OEM, марка, модел...">
-                    <button class="btn btn-primary" onclick="searchParts()">Търси</button>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-5">
+                        <input type="text" id="search-query" class="form-control" placeholder="Търси по име на част, OEM или рафт...">
+                    </div>
+                    <div class="col-md-3">
+                        <select id="filter-make" class="form-select" onchange="onMakeChange()">
+                            <option value="">-- Всички марки --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select id="filter-model" class="form-select">
+                            <option value="">-- Всички модели --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <button class="btn btn-primary w-100" onclick="searchParts()">Търси</button>
+                    </div>
                 </div>
             </div>
             <div id="search-results"></div>
@@ -150,6 +164,7 @@
 <script>
     let globalWarehouses = [];
     let globalCars = [];
+    let allPartsData = [];
 
     document.addEventListener("DOMContentLoaded", function() {
         loadWarehouses();
@@ -256,14 +271,47 @@
             const res = await fetch('/cars/summary');
             if (!res.ok) return;
             globalCars = await res.json();
+
+            // Попълваме менюто за създаване на част
             const select = document.getElementById('part_car_id');
             select.innerHTML = '<option value="">-- Без конкретна кола --</option>';
             globalCars.forEach(c => {
                 select.innerHTML += `<option value="${c.id}">${c.title}</option>`;
             });
+
+            // Попълваме менюто за Марки в Търсачката
+            populateMakeDropdown();
         } catch (e) {
             console.error("Грешка при коли:", e);
         }
+    }
+
+    function populateMakeDropdown() {
+        const makeSelect = document.getElementById('filter-make');
+        makeSelect.innerHTML = '<option value="">-- Всички марки --</option>';
+
+        const makes = [...new Set(globalCars.map(c => c.make).filter(Boolean))];
+        makes.sort().forEach(m => {
+            makeSelect.innerHTML += `<option value="${m}">${m}</option>`;
+        });
+    }
+
+    function onMakeChange() {
+        const selectedMake = document.getElementById('filter-make').value;
+        const modelSelect = document.getElementById('filter-model');
+        modelSelect.innerHTML = '<option value="">-- Всички модели --</option>';
+
+        if (!selectedMake) return;
+
+        const filteredModels = globalCars
+            .filter(c => c.make === selectedMake)
+            .map(c => c.model)
+            .filter(Boolean);
+
+        const uniqueModels = [...new Set(filteredModels)];
+        uniqueModels.sort().forEach(m => {
+            modelSelect.innerHTML += `<option value="${m}">${m}</option>`;
+        });
     }
 
     async function loadCarsSummary() {
@@ -304,7 +352,6 @@
         }
     }
 
-    // БЪРЗО СВАЛЯНЕ И ПРОДАЖБА ОТ КОЛА
     async function quickSellPartFromCar(carId, carTitle) {
         const partName = prompt(`Сваляне на част от: ${carTitle}\nВъведете име на частта (напр. Скоростна кутия):`);
         if (!partName) return;
@@ -338,7 +385,6 @@
                 return;
             }
 
-            // Маркираме я веднага като продадена за баланса
             const createdPart = await res.json();
             const partId = Array.isArray(createdPart) ? createdPart[0].id : createdPart.id;
 
@@ -476,23 +522,38 @@
         }
     }
 
+    // --- ТЪРСЕНЕ С ФИЛТРИ КЛИЕНТСКИ ---
     async function searchParts() {
-        const query = document.getElementById('search-query').value.trim();
+        const query = document.getElementById('search-query').value.trim().toLowerCase();
+        const selectedMake = document.getElementById('filter-make').value.toLowerCase();
+        const selectedModel = document.getElementById('filter-model').value.toLowerCase();
+
         const container = document.getElementById('search-results');
         container.innerHTML = '<p class="text-muted">Зареждане...</p>';
 
         try {
-            const url = query ? `/parts/search?q=${encodeURIComponent(query)}` : '/parts/search';
-            const res = await fetch(url);
-            const parts = await res.json();
+            const res = await fetch('/parts/search');
+            allPartsData = await res.json();
 
-            if (parts.length === 0) {
+            const filteredParts = allPartsData.filter(p => {
+                const titleMatch = !query || (p.title && p.title.toLowerCase().includes(query)) || (p.oem_number && p.oem_number.toLowerCase().includes(query)) || (p.shelf_location && p.shelf_location.toLowerCase().includes(query));
+
+                let carMake = p.cars ? (p.cars.make || '').toLowerCase() : '';
+                let carModel = p.cars ? (p.cars.model || '').toLowerCase() : '';
+
+                const makeMatch = !selectedMake || carMake === selectedMake;
+                const modelMatch = !selectedModel || carModel === selectedModel;
+
+                return titleMatch && makeMatch && modelMatch;
+            });
+
+            if (filteredParts.length === 0) {
                 container.innerHTML = '<p class="text-muted">Няма намерени резултати.</p>';
                 return;
             }
 
             container.innerHTML = '';
-            parts.forEach(p => {
+            filteredParts.forEach(p => {
                 const imgTag = p.photo_url ? `<img src="${p.photo_url}" class="preview-img me-3">` : '';
                 let carInfo = 'Обща част';
                 if (p.cars) {
