@@ -31,12 +31,12 @@
 
     <div class="tab-content" id="mainTabContent">
         
-        <!-- 1. ТЪРСЕНЕ НА ЧАСТИ -->
+        <!-- 1. ТЪРСЕНЕ НА ЧАСТИ И КОЛИ -->
         <div class="tab-pane fade show active" id="search-pane">
             <div class="card p-3 mb-4">
-                <h4>Търсене на авточаст</h4>
+                <h4>Търсене на авточаст или кола</h4>
                 <div class="input-group">
-                    <input type="text" id="search-query" class="form-control" placeholder="Въведете име или OEM номер (мин. 2 букви)...">
+                    <input type="text" id="search-query" class="form-control" placeholder="Натиснете Търси за всички части или въведете име, OEM, марка, модел...">
                     <button class="btn btn-primary" onclick="searchParts()">Търси</button>
                 </div>
             </div>
@@ -83,7 +83,7 @@
             </div>
         </div>
 
-        <!-- 3. УПРАВЛЕНИЕ НА СКТАДОВЕ И КОЛИ -->
+        <!-- 3. УПРАВЛЕНИЕ НА СКЛАДОВЕ И КОЛИ -->
         <div class="tab-pane fade" id="cars-pane">
             <div class="row">
                 <!-- ДОБАВЯНЕ НА СКЛАД -->
@@ -102,13 +102,18 @@
                     </div>
                 </div>
 
-                <!-- ДОБАВЯНЕ НА КОЛА -->
+                <!-- ДОБАВЯНЕ НА КОЛА С ОТДЕЛНИ ПОЛЕТА МАРКА И МОДЕЛ -->
                 <div class="col-md-6 mb-4">
                     <div class="card p-3">
                         <h5>🚗 Добави Нова Кола-Донор</h5>
                         <form onsubmit="saveCar(event)">
-                            <div class="mb-2">
-                                <input type="text" id="car_title" class="form-control" placeholder="Марка и модел (напр. Audi A4 B8 2.0 TDI)" required>
+                            <div class="row mb-2">
+                                <div class="col-6">
+                                    <input type="text" id="car_make" class="form-control" placeholder="Марка (напр. Audi)" required>
+                                </div>
+                                <div class="col-6">
+                                    <input type="text" id="car_model" class="form-control" placeholder="Модел (напр. A4 B8)" required>
+                                </div>
                             </div>
                             <div class="mb-2">
                                 <input type="number" step="0.01" id="car_purchase_price" class="form-control" placeholder="Покупна цена (лв.)" required>
@@ -139,17 +144,17 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-    // Зареждане на първоначалните данни при отваряне
     document.addEventListener("DOMContentLoaded", function() {
         loadWarehouses();
         loadCars();
         loadCarsSummary();
+        searchParts(); // Автоматично зарежда всички части при отваряне
     });
 
-    // 1. Зареждане на складовете в падащите менюта
     async function loadWarehouses() {
         try {
-            const res = await fetch('/warehouses/');
+            const res = await fetch('/warehouses');
+            if (!res.ok) return;
             const warehouses = await res.json();
             const select = document.getElementById('car_warehouse_id');
             select.innerHTML = '<option value="">-- Избери Склад --</option>';
@@ -161,10 +166,10 @@
         }
     }
 
-    // 2. Зареждане на колите в падащото меню за части
     async function loadCars() {
         try {
             const res = await fetch('/cars/summary');
+            if (!res.ok) return;
             const cars = await res.json();
             const select = document.getElementById('part_car_id');
             select.innerHTML = '<option value="">-- Без конкретна кола --</option>';
@@ -176,11 +181,14 @@
         }
     }
 
-    // 3. Зареждане на финансовия баланс за колите
     async function loadCarsSummary() {
         const container = document.getElementById('cars-summary-list');
         try {
             const res = await fetch('/cars/summary');
+            if (!res.ok) {
+                container.innerHTML = '<p class="text-danger">Грешка при зареждане на баланса.</p>';
+                return;
+            }
             const cars = await res.json();
             if (cars.length === 0) {
                 container.innerHTML = '<p class="text-muted">Все още няма въведени коли.</p>';
@@ -204,60 +212,68 @@
         }
     }
 
-    // 4. Запазване на Склад
     async function saveWarehouse(e) {
         e.preventDefault();
         const data = {
             name: document.getElementById('wh_name').value,
             address: document.getElementById('wh_address').value || null
         };
-    
+
         try {
             const res = await fetch('/warehouses', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(data)
             });
-    
-            const result = await res.json();
-    
+
             if (!res.ok) {
-                // Показва точната грешка от сървъра в изскачащ прозорец
-                alert('Грешка от сървъра: ' + JSON.stringify(result));
+                const errorData = await res.json();
+                alert('Грешка: ' + JSON.stringify(errorData));
                 return;
             }
-    
+
             alert('Складът е добавен успешно!');
             document.getElementById('wh_name').value = '';
             document.getElementById('wh_address').value = '';
             loadWarehouses();
         } catch (err) {
-            alert('Мрежова грешка: ' + err.message);
+            alert('Грешка при връзката: ' + err.message);
         }
     }
 
-
-    // 5. Запазване на Кола
     async function saveCar(e) {
         e.preventDefault();
         const data = {
-            title: document.getElementById('car_title').value,
+            make: document.getElementById('car_make').value,
+            model: document.getElementById('car_model').value,
             purchase_price: parseFloat(document.getElementById('car_purchase_price').value),
             warehouse_id: parseInt(document.getElementById('car_warehouse_id').value)
         };
-        await fetch('/cars/', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-        alert('Колата е добавена успешно!');
-        document.getElementById('car_title').value = '';
-        document.getElementById('car_purchase_price').value = '';
-        loadCars();
-        loadCarsSummary();
+
+        try {
+            const res = await fetch('/cars', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                alert('Грешка: ' + JSON.stringify(errorData));
+                return;
+            }
+
+            alert('Колата е добавена успешно!');
+            document.getElementById('car_make').value = '';
+            document.getElementById('car_model').value = '';
+            document.getElementById('car_purchase_price').value = '';
+            loadCars();
+            loadCarsSummary();
+        } catch (err) {
+            alert('Грешка при връзката: ' + err.message);
+        }
     }
 
-    // 6. Запазване на Част (с качване на снимка)
     async function savePart(e) {
         e.preventDefault();
         let photo_url = null;
@@ -267,13 +283,17 @@
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
             
-            const uploadRes = await fetch('/upload-photo/', {
-                method: 'POST',
-                body: formData
-            });
-            if (uploadRes.ok) {
-                const uploadData = await uploadRes.json();
-                photo_url = uploadData.photo_url;
+            try {
+                const uploadRes = await fetch('/upload-photo', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (uploadRes.ok) {
+                    const uploadData = await uploadRes.json();
+                    photo_url = uploadData.photo_url;
+                }
+            } catch (uploadErr) {
+                console.error("Грешка при снимката:", uploadErr);
             }
         }
 
@@ -287,45 +307,59 @@
             photo_url: photo_url
         };
 
-        await fetch('/parts/', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(partData)
-        });
+        try {
+            const res = await fetch('/parts', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(partData)
+            });
 
-        alert('Частта е добавена успешно!');
-        document.getElementById('part-form').reset();
-        loadCarsSummary();
+            if (!res.ok) {
+                const errorData = await res.json();
+                alert('Грешка при добавяне на част: ' + JSON.stringify(errorData));
+                return;
+            }
+
+            alert('Частта е добавена успешно!');
+            document.getElementById('part-form').reset();
+            searchParts();
+            loadCarsSummary();
+        } catch (err) {
+            alert('Грешка при връзката: ' + err.message);
+        }
     }
 
-    // 7. Търсене на Части
+    // ТЪРСЕНЕ: Без изискване за 2 символа + показва и данните на колата
     async function searchParts() {
-        const query = document.getElementById('search-query').value;
-        if (query.length < 2) {
-            alert('Моля, въведете поне 2 символа за търсене.');
-            return;
-        }
-
+        const query = document.getElementById('search-query').value.trim();
         const container = document.getElementById('search-results');
-        container.innerHTML = '<p class="text-muted">Търсене...</p>';
+        container.innerHTML = '<p class="text-muted">Зареждане...</p>';
 
         try {
-            const res = await fetch(`/parts/search?q=${encodeURIComponent(query)}`);
+            const url = query ? `/parts/search?q=${encodeURIComponent(query)}` : '/parts/search';
+            const res = await fetch(url);
             const parts = await res.json();
 
             if (parts.length === 0) {
-                container.innerHTML = '<p class="text-muted">Няма намерени части.</p>';
+                container.innerHTML = '<p class="text-muted">Няма намерени резултати.</p>';
                 return;
             }
 
             container.innerHTML = '';
             parts.forEach(p => {
                 const imgTag = p.photo_url ? `<img src="${p.photo_url}" class="preview-img me-3">` : '';
+                
+                // Извличане на марка/модел на колата, ако е свързана
+                let carInfo = 'Обща част';
+                if (p.cars) {
+                    carInfo = `${p.cars.make || ''} ${p.cars.model || ''}`.trim() || p.cars.title || 'Кола';
+                }
+
                 container.innerHTML += `
                     <div class="card p-3 mb-2 d-flex flex-row align-items-center">
                         ${imgTag}
                         <div class="flex-grow-1">
-                            <h5 class="mb-1">${p.title}</h5>
+                            <h5 class="mb-1">${p.title} <small class="text-primary">(${carInfo})</small></h5>
                             <p class="mb-1 text-muted"><small>OEM: ${p.oem_number || 'Няма'} | Място: ${p.shelf_location || 'Няма'}</small></p>
                             <span class="badge bg-${p.status === 'Продадено' ? 'danger' : 'success'}">${p.status}</span>
                         </div>
@@ -340,20 +374,23 @@
         }
     }
 
-    // 8. Маркиране на част като продадена
     async function sellPart(partId) {
         const price = prompt("Въведете крайната цена, на която е продадена частта (лв.):");
         if (!price) return;
 
-        await fetch(`/parts/${partId}/sell`, {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ sold_price: parseFloat(price) })
-        });
+        try {
+            await fetch(`/parts/${partId}/sell`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ sold_price: parseFloat(price) })
+            });
 
-        alert('Частта е маркирана като продадена!');
-        searchParts();
-        loadCarsSummary();
+            alert('Частта е маркирана като продадена!');
+            searchParts();
+            loadCarsSummary();
+        } catch (err) {
+            alert('Грешка: ' + err.message);
+        }
     }
 </script>
 
