@@ -115,3 +115,43 @@ def get_ui():
 def get_warehouses():
   response = supabase.table("warehouses").select("*").execute()
   return response.data
+
+# 1. Вземане на всички складове (за падащото меню)
+@app.get("/warehouses/")
+def get_warehouses():
+  response = supabase.table("warehouses").select("*").execute()
+  return response.data
+
+
+# 2. Вземане на всички коли + техния финансов баланс
+@app.get("/cars/summary")
+def get_cars_summary():
+  cars_res = supabase.table("cars").select("*").execute()
+  cars = cars_res.data
+
+  for car in cars:
+    # Вземаме всички части за тази кола
+    parts_res = (
+        supabase.table("parts")
+        .select("price, sold_price, status")
+        .eq("car_id", car["id"])
+        .execute()
+    )
+    parts = parts_res.data
+
+    # Изчисляваме приходите
+    total_parts_price = sum(p["price"] for p in parts)
+    total_sales = sum(
+        p["sold_price"]
+        for p in parts
+        if p["status"] == "Продадено" and p["sold_price"]
+    )
+    net_profit = total_sales - car["purchase_price"]
+
+    car["total_parts_val"] = total_parts_price
+    car["total_sales"] = total_sales
+    car["net_profit"] = net_profit
+    car["parts_count"] = len(parts)
+
+  return cars
+
