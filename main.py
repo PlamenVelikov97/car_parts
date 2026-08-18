@@ -17,24 +17,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+# Премахване на излишни наклонени черти и разстояния от URL-а
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
-try:
-  supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-  print(f"Грешка при иницииране на Supabase: {e}")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+class WarehouseCreate(BaseModel):
+  name: str
+  address: Optional[str] = None
 
 
 class CarCreate(BaseModel):
   title: str
   purchase_price: float
   warehouse_id: Optional[int] = None
-
-
-class WarehouseCreate(BaseModel):
-  name: str
-  address: Optional[str] = None
 
 
 class PartCreate(BaseModel):
@@ -53,6 +51,13 @@ class PartSell(BaseModel):
   sold_price: float
 
 
+def to_dict(model: BaseModel) -> dict:
+  """Конвертира Pydantic модел към речник безопасно за v1 и v2."""
+  if hasattr(model, "model_dump"):
+    return model.model_dump()
+  return model.dict()
+
+
 @app.get("/")
 @app.get("/ui")
 def get_ui():
@@ -68,7 +73,7 @@ def get_warehouses():
     res = supabase.table("warehouses").select("*").execute()
     return res.data or []
   except Exception as e:
-    print("Грешка warehouses:", e)
+    print("Грешка при четене на складове:", e)
     return []
 
 
@@ -76,9 +81,11 @@ def get_warehouses():
 @app.post("/warehouses/")
 def create_warehouse(wh: WarehouseCreate):
   try:
-    res = supabase.table("warehouses").insert(wh.dict()).execute()
+    data = to_dict(wh)
+    res = supabase.table("warehouses").insert(data).execute()
     return res.data
   except Exception as e:
+    print(f"Грешка при създаване на склад: {e}")
     raise HTTPException(
         status_code=500, detail=f"Грешка при създаване на склад: {str(e)}"
     )
@@ -121,7 +128,7 @@ def get_cars_summary():
 
     return cars
   except Exception as e:
-    print("Грешка cars summary:", e)
+    print("Грешка при коли summary:", e)
     return []
 
 
@@ -129,9 +136,11 @@ def get_cars_summary():
 @app.post("/cars/")
 def create_car(car: CarCreate):
   try:
-    res = supabase.table("cars").insert(car.dict()).execute()
+    data = to_dict(car)
+    res = supabase.table("cars").insert(data).execute()
     return res.data
   except Exception as e:
+    print(f"Грешка при добавяне на кола: {e}")
     raise HTTPException(
         status_code=500, detail=f"Грешка при добавяне на кола: {str(e)}"
     )
@@ -154,6 +163,7 @@ async def upload_photo(file: UploadFile = File(...)):
     )
     return {"photo_url": public_url}
   except Exception as e:
+    print(f"Грешка при качване на снимка: {e}")
     raise HTTPException(
         status_code=500, detail=f"Грешка при качване на снимка: {str(e)}"
     )
@@ -163,9 +173,11 @@ async def upload_photo(file: UploadFile = File(...)):
 @app.post("/parts/")
 def create_part(part: PartCreate):
   try:
-    res = supabase.table("parts").insert(part.dict()).execute()
+    data = to_dict(part)
+    res = supabase.table("parts").insert(data).execute()
     return res.data
   except Exception as e:
+    print(f"Грешка при създаване на част: {e}")
     raise HTTPException(
         status_code=500, detail=f"Грешка при създаване на част: {str(e)}"
     )
@@ -182,7 +194,7 @@ def search_parts(q: str = Query(..., min_length=2)):
     )
     return res.data or []
   except Exception as e:
-    print("Грешка search:", e)
+    print("Грешка при търсене:", e)
     return []
 
 
@@ -195,6 +207,7 @@ def sell_part(part_id: int, sell_data: PartSell):
     )
     return res.data
   except Exception as e:
+    print(f"Грешка при продажба: {e}")
     raise HTTPException(
         status_code=500, detail=f"Грешка при продажба: {str(e)}"
     )
