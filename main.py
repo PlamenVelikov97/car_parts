@@ -81,11 +81,15 @@ def get_warehouses():
 @app.post("/warehouses/")
 def create_warehouse(wh: WarehouseCreate):
   try:
+    # Превръщаме Pydantic модела в речник, премахвайки None стойности
     data = to_dict(wh)
+    # Изчистваме празни полета, за да ползва подразбиращите се стойности в DB
+    data = {k: v for k, v in data.items() if v is not None}
+
     res = supabase.table("warehouses").insert(data).execute()
     return res.data
   except Exception as e:
-    print(f"Грешка при създаване на склад: {e}")
+    print(f"Грешка при запис на склад: {e}")
     raise HTTPException(
         status_code=500, detail=f"Грешка при създаване на склад: {str(e)}"
     )
