@@ -86,7 +86,6 @@
 
         .badge-available { background-color: #01b574; color: white; }
         .badge-sold { background-color: #ee5d50; color: white; }
-        .badge-scrapped { background-color: #6c757d; color: white; }
 
         .notes-box {
             background: #f8fafc;
@@ -95,6 +94,19 @@
             border-radius: 0 8px 8px 0;
             font-size: 0.9rem;
             color: #4a5568;
+        }
+
+        /* Жълт стил за коли на скрап */
+        .car-card-scrapped {
+            background-color: #fffdf0 !important;
+            border: 2px solid #f6c23e !important;
+            border-radius: 16px;
+        }
+
+        .car-card-normal {
+            background-color: #f8fafc !important;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 16px;
         }
 
         .modal-body-img-container {
@@ -113,6 +125,45 @@
             font-weight: 700;
             padding: 10px 16px;
             border-radius: 10px;
+        }
+
+        /* Визуален списък за избор на Кола-Донор */
+        .car-picker-container {
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 8px;
+            background: #fff;
+        }
+
+        .car-picker-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 6px;
+            border: 1px solid #f1f5f9;
+            transition: background 0.2s;
+        }
+
+        .car-picker-item:hover {
+            background-color: #f1f5f9;
+        }
+
+        .car-picker-item.selected {
+            background-color: #e0e7ff;
+            border-color: #6366f1;
+        }
+
+        .car-picker-img {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-right: 12px;
+            background-color: #e2e8f0;
         }
     </style>
 </head>
@@ -185,17 +236,24 @@
                 <h4 class="fw-bold mb-4" id="part-form-title"><i class="fa-solid fa-wrench me-2 text-primary"></i>Добавяне на авточаст</h4>
                 <form id="part-form" onsubmit="savePart(event)">
                     <input type="hidden" id="editing_part_id" value="">
+                    <input type="hidden" id="part_car_id" value="">
                     
-                    <div class="row mb-3">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label fw-semibold">Свържи с Кола-Донор (Опция)</label>
-                            <select id="part_car_id" class="form-select" onchange="onDonorCarSelect()">
-                                <option value="">-- Без конкретна кола (Самостоятелна част) --</option>
-                            </select>
+                    <!-- Избор на Кола Донор с визуална информация и снимки -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Избери Кола-Донор (Кликнете върху колата)</label>
+                        <div class="car-picker-container" id="car-picker-list">
+                            <!-- Зарежда се динамично -->
                         </div>
+                    </div>
+
+                    <div class="row mb-3">
                         <div class="col-md-6 mb-3">
                             <label class="form-label fw-semibold">Наименование на частта *</label>
                             <input type="text" id="part_title" class="form-control" required placeholder="напр. Скоростна кутия, Двигател, Предна броня...">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">OEM Номер</label>
+                            <input type="text" id="part_oem" class="form-control" placeholder="напр. 8K0807225">
                         </div>
                     </div>
 
@@ -215,15 +273,11 @@
                     </div>
 
                     <div class="row mb-3">
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label fw-semibold">OEM Номер</label>
-                            <input type="text" id="part_oem" class="form-control" placeholder="напр. 8K0807225">
-                        </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-6 mb-3">
                             <label class="form-label fw-semibold">Цена (лв.) *</label>
                             <input type="number" step="0.01" id="part_price" class="form-control" required placeholder="150.00">
                         </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-6 mb-3">
                             <label class="form-label fw-semibold">Склад / Местоположение</label>
                             <select id="part_warehouse_id" class="form-select">
                                 <option value="">-- Избери Склад --</option>
@@ -328,10 +382,15 @@
                 </div>
             </div>
 
-            <!-- СПИСЪК С КОЛИ И ФИЛТЪР -->
+            <!-- СПИСЪК С КОЛИ, ТАБОВЕ ЗА СКРАП И ФИЛТЪР -->
             <div class="custom-card">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3">
-                    <h5 class="fw-bold mb-2 mb-md-0"><i class="fa-solid fa-chart-line me-2 text-primary"></i>Налични Коли и Финансов Баланс</h5>
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-2">
+                    <!-- Бутони за превключване Налични / Скрап -->
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-primary active fw-bold" id="btn-tab-active-cars" onclick="setCarTab('active')"><i class="fa-solid fa-car me-1"></i> Налични Коли</button>
+                        <button type="button" class="btn btn-outline-warning text-dark fw-bold" id="btn-tab-scrapped-cars" onclick="setCarTab('scrapped')"><i class="fa-solid fa-recycle me-1"></i> На Скрап</button>
+                    </div>
+
                     <div class="w-100 w-md-auto" style="min-width: 280px;">
                         <input type="text" id="car-search-input" class="form-control form-control-sm" placeholder="🔍 Търси кола (марка, модел...)" oninput="filterCarsList()">
                     </div>
@@ -373,6 +432,8 @@
     let globalWarehouses = [];
     let globalCars = [];
     let globalParts = [];
+
+    let activeCarTab = 'active'; // 'active' или 'scrapped'
 
     // Променливи за Модалната Галерия
     let currentGalleryPhotos = [];
@@ -550,18 +611,52 @@
             if (!res.ok) return;
             globalCars = await res.json();
 
-            const select = document.getElementById('part_car_id');
-            select.innerHTML = '<option value="">-- Без конкретна кола (Самостоятелна част) --</option>';
-            globalCars.forEach(c => {
-                select.innerHTML += `<option value="${c.id}">${c.title}</option>`;
-            });
-
+            renderCarPicker();
             populateMakeDropdown();
         } catch (e) { console.error(e); }
     }
 
-    function onDonorCarSelect() {
-        const carId = document.getElementById('part_car_id').value;
+    // Изгражда интерактивния списък с коли и снимки във формата за част
+    function renderCarPicker(selectedCarId = null) {
+        const container = document.getElementById('car-picker-list');
+        if (!container) return;
+
+        let html = `
+            <div class="car-picker-item ${!selectedCarId ? 'selected' : ''}" onclick="selectCarPicker('')">
+                <div class="car-picker-img d-flex align-items-center justify-content-center bg-secondary text-white fw-bold"><i class="fa-solid fa-ban"></i></div>
+                <div>
+                    <strong>-- Без конкретна кола (Самостоятелна част) --</strong>
+                </div>
+            </div>`;
+
+        globalCars.forEach(c => {
+            const isSelected = selectedCarId == c.id;
+            const imgUrl = (c.photo_urls && c.photo_urls.length > 0) ? c.photo_urls[0] : '';
+            const imgHtml = imgUrl 
+                ? `<img src="${imgUrl}" class="car-picker-img">`
+                : `<div class="car-picker-img d-flex align-items-center justify-content-center bg-light"><i class="fa-solid fa-car text-muted fs-4"></i></div>`;
+
+            const isScrapped = c.notes && c.notes.includes('[НА СКРАП]');
+            const scrappedBadge = isScrapped ? `<span class="badge bg-warning text-dark ms-2"><i class="fa-solid fa-recycle me-1"></i>НА СКРАП</span>` : '';
+            const whName = c.warehouses ? c.warehouses.name : 'Без склад';
+
+            html += `
+                <div class="car-picker-item ${isSelected ? 'selected' : ''}" onclick="selectCarPicker(${c.id})">
+                    ${imgHtml}
+                    <div>
+                        <strong>🚗 ${c.title}</strong> ${scrappedBadge}<br>
+                        <small class="text-muted">${c.engine || ''} ${c.fuel_type || ''} | <i class="fa-solid fa-warehouse me-1"></i>${whName}</small>
+                    </div>
+                </div>`;
+        });
+
+        container.innerHTML = html;
+    }
+
+    function selectCarPicker(carId) {
+        document.getElementById('part_car_id').value = carId || '';
+        renderCarPicker(carId);
+
         const makeInput = document.getElementById('part_make');
         const modelInput = document.getElementById('part_model');
         const yearInput = document.getElementById('part_year');
@@ -712,10 +807,27 @@
         try {
             const res = await fetch('/cars/summary');
             globalCars = await res.json();
+            renderCarPicker();
             filterCarsList();
         } catch (e) {
             document.getElementById('cars-summary-list').innerHTML = '<p class="text-danger">Грешка при зареждане.</p>';
         }
+    }
+
+    function setCarTab(tab) {
+        activeCarTab = tab;
+        const btnActive = document.getElementById('btn-tab-active-cars');
+        const btnScrapped = document.getElementById('btn-tab-scrapped-cars');
+
+        if (tab === 'active') {
+            btnActive.className = "btn btn-primary active fw-bold";
+            btnScrapped.className = "btn btn-outline-warning text-dark fw-bold";
+        } else {
+            btnActive.className = "btn btn-outline-primary fw-bold";
+            btnScrapped.className = "btn btn-warning fw-bold text-dark active";
+        }
+
+        filterCarsList();
     }
 
     // Филтриране на списъка с коли
@@ -724,13 +836,20 @@
         const container = document.getElementById('cars-summary-list');
         
         const filteredCars = globalCars.filter(c => {
+            const isScrapped = c.notes && c.notes.includes('[НА СКРАП]');
+
+            // Филтриране според избрания Таб (Налични vs Скрап)
+            if (activeCarTab === 'active' && isScrapped) return false;
+            if (activeCarTab === 'scrapped' && !isScrapped) return false;
+
             if (!query) return true;
             const fullTitle = `${c.title || ''} ${c.make || ''} ${c.model || ''} ${c.engine || ''} ${c.notes || ''}`.toLowerCase();
             return fullTitle.includes(query);
         });
 
         if (filteredCars.length === 0) {
-            container.innerHTML = '<p class="text-muted text-center py-3">Няма намерени коли с този критерий.</p>';
+            const emptyMsg = activeCarTab === 'active' ? 'Няма намерени налични коли.' : 'Няма коли предадени на скрап.';
+            container.innerHTML = `<p class="text-muted text-center py-4">${emptyMsg}</p>`;
             return;
         }
 
@@ -740,9 +859,12 @@
             const whName = c.warehouses ? c.warehouses.name : 'Без склад';
             const engineInfo = c.engine || c.fuel_type ? `<small class="badge bg-secondary me-2">${c.engine || ''} ${c.fuel_type || ''}</small>` : '';
             
+            const isScrapped = c.notes && c.notes.includes('[НА СКРАП]');
+            const cardClass = isScrapped ? 'car-card-scrapped' : 'car-card-normal';
+
             // Забележка + Индикатор за скрап
             let notesHtml = c.notes ? `<div class="notes-box mt-2"><i class="fa-regular fa-note-sticky me-1"></i>${c.notes}</div>` : '';
-            if (c.notes && c.notes.includes('[НА СКРАП]')) {
+            if (isScrapped) {
                 notesHtml = `<div class="notes-box bg-warning bg-opacity-25 border-warning mt-2 fw-bold text-dark"><i class="fa-solid fa-recycle me-1"></i>${c.notes}</div>`;
             }
 
@@ -757,15 +879,15 @@
             }
 
             container.innerHTML += `
-                <div class="border-0 bg-light rounded-4 p-3 mb-3">
+                <div class="p-3 mb-3 ${cardClass}">
                     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center">
                         <div class="mb-2 mb-md-0">
-                            <h5 class="mb-0 fw-bold">🚗 ${c.title}</h5>
+                            <h5 class="mb-0 fw-bold">🚗 ${c.title} ${isScrapped ? '<span class="badge bg-warning text-dark ms-2"><i class="fa-solid fa-recycle me-1"></i>НА СКРАП</span>' : ''}</h5>
                             <div class="mt-1">${engineInfo} <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>${whName} | <i class="fa-regular fa-calendar me-1"></i>Купена: ${formatDate(c.purchase_date)}</small></div>
                         </div>
                         <div class="d-flex gap-1 align-items-center">
                             <button class="btn btn-sm btn-outline-primary fw-bold" title="Редактирай" onclick="editCar(${c.id})"><i class="fa-solid fa-pen"></i></button>
-                            <button class="btn btn-sm btn-outline-warning fw-bold text-dark" title="Предай на скрап" onclick="scrapCar(${c.id}, '${c.title}')"><i class="fa-solid fa-recycle me-1"></i>На скрап</button>
+                            ${!isScrapped ? `<button class="btn btn-sm btn-outline-warning fw-bold text-dark" title="Предай на скрап" onclick="scrapCar(${c.id}, '${c.title}')"><i class="fa-solid fa-recycle me-1"></i>На скрап</button>` : ''}
                             <button class="btn btn-sm btn-light text-danger fw-bold" title="Изтрий" onclick="deleteCar(${c.id})"><i class="fa-solid fa-trash"></i></button>
                         </div>
                     </div>
@@ -806,7 +928,6 @@
         };
 
         try {
-            // Добавяме скрап продажбата
             const res = await fetch('/parts', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -823,7 +944,6 @@
                 });
             }
 
-            // Обновяваме бележката на колата, че е предадена на скрап
             const car = globalCars.find(c => c.id === carId);
             if (car) {
                 const updatedNotes = (car.notes || '') + ` [НА СКРАП: ${scrapPrice} лв.]`;
@@ -846,7 +966,7 @@
 
             searchParts();
             loadCarsSummary();
-            alert("Колата е предадена на скрап! Сумата е добавена към продажбите.");
+            alert("Колата е предадена на скрап и е преместена в сектор 'На Скрап'!");
         } catch (err) { alert('Грешка: ' + err.message); }
     }
 
@@ -953,9 +1073,8 @@
 
         document.getElementById('editing_part_id').value = part.id;
         document.getElementById('part_title').value = part.title || '';
-        document.getElementById('part_car_id').value = part.car_id || '';
         
-        onDonorCarSelect();
+        selectCarPicker(part.car_id);
 
         if (!part.car_id) {
             document.getElementById('part_make').value = part.make || '';
@@ -979,9 +1098,7 @@
     function resetPartForm() {
         document.getElementById('editing_part_id').value = '';
         document.getElementById('part-form').reset();
-        document.getElementById('part_make').disabled = false;
-        document.getElementById('part_model').disabled = false;
-        document.getElementById('part_year').disabled = false;
+        selectCarPicker('');
         document.getElementById('part-form-title').innerHTML = '<i class="fa-solid fa-wrench me-2 text-primary"></i>Добавяне на авточаст';
         document.getElementById('part-submit-btn').textContent = 'Запази Частта';
         document.getElementById('part-cancel-btn').classList.add('d-none');
@@ -1009,7 +1126,6 @@
                 const pModel = (p.model || (p.cars ? p.cars.model : '') || '').toLowerCase();
                 const pTitle = (p.title || '').toLowerCase();
 
-                // Подобрена проверка: включва име, OEM, бележка, както и МАРКА и МОДЕЛ
                 const textMatch = !query || 
                     pTitle.includes(query) || 
                     pMake.includes(query) || 
@@ -1077,7 +1193,6 @@
                             <span class="badge ${badgeClass} mb-2 d-inline-block px-3 py-2 rounded-3">${p.status || 'Налично'}</span>
                             <h3 class="fw-bold text-primary mb-2">${isSold ? (p.sold_price || p.price) : p.price} лв.</h3>
                             
-                            <!-- БУТОНИ ЗА УПРАВЛЕНИЕ -->
                             <div class="d-flex flex-column gap-2 mt-2">
                                 <div class="d-flex gap-1 justify-content-md-end">
                                     <button class="btn btn-sm btn-outline-primary fw-bold px-3" onclick="editPart(${p.id})"><i class="fa-solid fa-pen me-1"></i>Редактирай</button>
