@@ -96,34 +96,35 @@ async def ai_analyze(data: AIAnalyzeRequest):
         with urllib.request.urlopen(req) as response:
             image_bytes = response.read()
 
-        image_part = types.Part.from_bytes(
-            data=image_bytes,
-            mime_type="image/jpeg",
-        )
-
         if data.type == 'car':
-            prompt = """Анализирай тази снимка на автомобил. Върни САМО валиден JSON обект със следните полета:
+            prompt = """Анализирай тази снимка на автомобил. Върни САМО валиден JSON обект без никакви допълнителни символи или markdown formatting:
             {
               "make": "Марка (напр. BMW, Audi, VW)",
               "model": "Модел (напр. 320, A4, Golf)",
-              "year": Година като число (ако може да се определи от поколението, иначе null),
+              "year": 2005,
               "engine": "Обем/Двигател (ако личи надпис, иначе null)",
               "fuel_type": "Дизел/Бензин/Електро/null"
             }"""
         else:
-            prompt = """Анализирай тази снимка на авточаст. Върни САМО валиден JSON обект със следните полета:
+            prompt = """Анализирай тази снимка на авточаст. Върни САМО валиден JSON обект без никакви допълнителни символи или markdown formatting:
             {
               "title": "Точно наименование на частта на български (напр. Предна броня, Алтернатор, Скоростна кутия)",
               "make": "Марка на автомобила (ако има емблема/лого, иначе null)",
               "model": "Модел автомобил (ако личи, иначе null)",
-              "year": Година като число (ако личи, иначе null),
+              "year": 2005,
               "oem_number": "OEM номер (ако се вижда ясно сериен номер, иначе null)"
             }"""
 
-        # Изпращаме снимката и промпта към Gemini 2.5
+        # Подаване на байтовете директно чрез types.Part.from_bytes
         response = gemini_client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=[prompt, image_part],
+            contents=[
+                types.Part.from_bytes(
+                    data=image_bytes,
+                    mime_type="image/jpeg",
+                ),
+                prompt
+            ],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json"
             )
