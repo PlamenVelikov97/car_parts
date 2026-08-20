@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import uuid
 from typing import Optional
@@ -31,20 +32,26 @@ class WarehouseCreate(BaseModel):
 class CarCreate(BaseModel):
   make: str
   model: str
+  year: Optional[int] = None
   purchase_price: float
+  purchase_date: Optional[str] = None
   warehouse_id: Optional[int] = None
+  notes: Optional[str] = None
 
 
 class PartCreate(BaseModel):
   title: str
+  make: Optional[str] = None
+  model: Optional[str] = None
+  year: Optional[int] = None
   oem_number: Optional[str] = None
-  compatible_models: Optional[str] = None
   price: float
-  status: str = "На колата"
+  status: str = "Налично"
   shelf_location: Optional[str] = None
-  car_id: Optional[int] = None
   warehouse_id: Optional[int] = None
+  car_id: Optional[int] = None
   photo_url: Optional[str] = None
+  notes: Optional[str] = None
 
 
 class PartSell(BaseModel):
@@ -69,7 +76,6 @@ def get_ui():
 
 
 @app.get("/warehouses")
-@app.get("/warehouses/")
 def get_warehouses():
   try:
     res = supabase.table("warehouses").select("*").execute()
@@ -80,16 +86,13 @@ def get_warehouses():
 
 
 @app.post("/warehouses")
-@app.post("/warehouses/")
 def create_warehouse(wh: WarehouseCreate):
   try:
     data = to_dict(wh)
     res = supabase.table("warehouses").insert(data).execute()
     return res.data
   except Exception as e:
-    raise HTTPException(
-        status_code=500, detail=f"Грешка при създаване на склад: {str(e)}"
-    )
+    raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.put("/warehouses/{wh_id}")
@@ -99,30 +102,24 @@ def update_warehouse(wh_id: int, wh: WarehouseCreate):
     res = supabase.table("warehouses").update(data).eq("id", wh_id).execute()
     return res.data
   except Exception as e:
-    raise HTTPException(
-        status_code=500, detail=f"Грешка при редакция на склад: {str(e)}"
-    )
+    raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/warehouses/{wh_id}")
 def delete_warehouse(wh_id: int):
   try:
     res = supabase.table("warehouses").delete().eq("id", wh_id).execute()
-    return {"message": "Складът е изтрит успешно", "data": res.data}
+    return {"message": "Успешно изтрит", "data": res.data}
   except Exception as e:
-    raise HTTPException(
-        status_code=500, detail=f"Грешка при изтриване на склад: {str(e)}"
-    )
+    raise HTTPException(status_code=500, detail=str(e))
 
 
 # --- КОЛИ ---
 
 
 @app.get("/cars/summary")
-@app.get("/cars/summary/")
 def get_cars_summary():
   try:
-    # Зареждаме колите заедно със свързания склад (warehouses)
     cars_res = supabase.table("cars").select("*, warehouses(*)").execute()
     cars = cars_res.data or []
 
@@ -149,8 +146,9 @@ def get_cars_summary():
       purchase_price = float(car.get("purchase_price") or 0)
       net_profit = total_sales - purchase_price
 
+      year_str = f" ({car.get('year')})" if car.get("year") else ""
       car_title = (
-          f"{car.get('make', '')} {car.get('model', '')}".strip()
+          f"{car.get('make', '')} {car.get('model', '')}{year_str}".strip()
           or car.get("title")
           or "Без име"
       )
@@ -167,30 +165,29 @@ def get_cars_summary():
 
 
 @app.post("/cars")
-@app.post("/cars/")
 def create_car(car: CarCreate):
   try:
     data = to_dict(car)
-    data["title"] = f"{car.make} {car.model}"
+    if not data.get("purchase_date"):
+      data["purchase_date"] = datetime.now().strftime("%Y-%m-%d")
+    year_str = f" ({car.year})" if car.year else ""
+    data["title"] = f"{car.make} {car.model}{year_str}"
     res = supabase.table("cars").insert(data).execute()
     return res.data
   except Exception as e:
-    raise HTTPException(
-        status_code=500, detail=f"Грешка при добавяне на кола: {str(e)}"
-    )
+    raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.put("/cars/{car_id}")
 def update_car(car_id: int, car: CarCreate):
   try:
     data = to_dict(car)
-    data["title"] = f"{car.make} {car.model}"
+    year_str = f" ({car.year})" if car.year else ""
+    data["title"] = f"{car.make} {car.model}{year_str}"
     res = supabase.table("cars").update(data).eq("id", car_id).execute()
     return res.data
   except Exception as e:
-    raise HTTPException(
-        status_code=500, detail=f"Грешка при редакция на кола: {str(e)}"
-    )
+    raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/cars/{car_id}")
@@ -199,16 +196,13 @@ def delete_car(car_id: int):
     res = supabase.table("cars").delete().eq("id", car_id).execute()
     return {"message": "Колата е изтрита успешно", "data": res.data}
   except Exception as e:
-    raise HTTPException(
-        status_code=500, detail=f"Грешка при изтриване на кола: {str(e)}"
-    )
+    raise HTTPException(status_code=500, detail=str(e))
 
 
 # --- ЧАСТИ & СНИМКИ ---
 
 
 @app.post("/upload-photo")
-@app.post("/upload-photo/")
 async def upload_photo(file: UploadFile = File(...)):
   try:
     file_bytes = await file.read()
@@ -223,29 +217,28 @@ async def upload_photo(file: UploadFile = File(...)):
     )
     return {"photo_url": public_url}
   except Exception as e:
-    raise HTTPException(
-        status_code=500, detail=f"Грешка при качване на снимка: {str(e)}"
-    )
+    raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/parts")
-@app.post("/parts/")
 def create_part(part: PartCreate):
   try:
     data = to_dict(part)
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
     res = supabase.table("parts").insert(data).execute()
     return res.data
   except Exception as e:
-    raise HTTPException(
-        status_code=500, detail=f"Грешка при създаване на част: {str(e)}"
-    )
+    raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/parts/search")
-def search_parts(q: Optional[str] = Query(None)):
+def search_parts():
   try:
-    # Зареждаме частите заедно с колата и склада на колата (cars(*, warehouses(*)))
-    res = supabase.table("parts").select("*, cars(*, warehouses(*))").execute()
+    res = (
+        supabase.table("parts")
+        .select("*, cars(*, warehouses(*)), warehouses(*)")
+        .execute()
+    )
     return res.data or []
   except Exception as e:
     print("Грешка при търсене на части:", e)
@@ -255,12 +248,14 @@ def search_parts(q: Optional[str] = Query(None)):
 @app.put("/parts/{part_id}/sell")
 def sell_part(part_id: int, sell_data: PartSell):
   try:
-    update_data = {"status": "Продадено", "sold_price": sell_data.sold_price}
+    update_data = {
+        "status": "Продадено",
+        "sold_price": sell_data.sold_price,
+        "sold_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
     res = (
         supabase.table("parts").update(update_data).eq("id", part_id).execute()
     )
     return res.data
   except Exception as e:
-    raise HTTPException(
-        status_code=500, detail=f"Грешка при продажба: {str(e)}"
-    )
+    raise HTTPException(status_code=500, detail=str(e))
