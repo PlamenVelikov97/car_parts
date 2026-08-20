@@ -1,8 +1,8 @@
 from datetime import datetime
 import os
+from typing import List, Optional
 import uuid
-from typing import Optional
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -33,10 +33,13 @@ class CarCreate(BaseModel):
   make: str
   model: str
   year: Optional[int] = None
+  engine: Optional[str] = None  # Двигател / Кубатура
+  fuel_type: Optional[str] = None  # Бензин, Дизел, Газ/Бензин, Хибрид, Електро
   purchase_price: float
   purchase_date: Optional[str] = None
   warehouse_id: Optional[int] = None
   notes: Optional[str] = None
+  photo_urls: Optional[List[str]] = []
 
 
 class PartCreate(BaseModel):
@@ -51,6 +54,7 @@ class PartCreate(BaseModel):
   warehouse_id: Optional[int] = None
   car_id: Optional[int] = None
   photo_url: Optional[str] = None
+  photo_urls: Optional[List[str]] = []
   notes: Optional[str] = None
 
 
@@ -70,6 +74,36 @@ def get_ui():
   if not os.path.exists("index.html"):
     raise HTTPException(status_code=404, detail="index.html не е намерен")
   return FileResponse("index.html")
+
+
+# --- КАЧВАНЕ НА ДО 10 СНИМКИ ---
+
+
+@app.post("/upload-photos")
+async def upload_photos(files: List[UploadFile] = File(...)):
+  if len(files) > 10:
+    raise HTTPException(
+        status_code=400, detail="Можете да качвате максимум 10 снимки наведнъж."
+    )
+
+  uploaded_urls = []
+  for file in files:
+    try:
+      file_bytes = await file.read()
+      file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+      file_name = f"{uuid.uuid4()}.{file_ext}"
+
+      supabase.storage.from_("parts-photos").upload(
+          file_name, file_bytes, {"content-type": file.content_type}
+      )
+      public_url = supabase.storage.from_("parts-photos").get_public_url(
+          file_name
+      )
+      uploaded_urls.append(public_url)
+    except Exception as e:
+      print(f"Грешка при качване на снимка {file.filename}:", e)
+
+  return {"photo_urls": uploaded_urls}
 
 
 # --- СКЛАДОВЕ ---
@@ -165,17 +199,19 @@ def get_cars_summary():
 
 
 @app.post("/cars")
-@app.post("/cars")
 def create_car(car: CarCreate):
   try:
     data = to_dict(car)
     if not data.get("purchase_date"):
-      data["purchase_date"] = datetime.now().strftime("%Y-%m-%d")
+      data["purchase_date"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     year_str = f" ({car.year})" if car.year else ""
     data["title"] = f"{car.make} {car.model}{year_str}".strip()
 
-    res = supabase.table("cars").insert(data).execute()
+    # Филатрираме None стойности за безопасност
+    clean_data = {k: v for k, v in data.items() if v is not None}
+
+    res = supabase.table("cars").insert(clean_data).execute()
     return res.data
   except Exception as e:
     print("Грешка при създаване на кола:", str(e))
@@ -186,15 +222,12 @@ def create_car(car: CarCreate):
 def update_car(car_id: int, car: CarCreate):
   try:
     data = to_dict(car)
-
-    # Динамично съставяне на title
     year_str = f" ({car.year})" if car.year else ""
     data["title"] = f"{car.make} {car.model}{year_str}".strip()
 
-    # Изтриваме None стойности за незадължителните полета, за да не чупят Supabase
-    data = {k: v for k, v in data.items() if v is not None}
+    clean_data = {k: v for k, v in data.items() if v is not None}
 
-    res = supabase.table("cars").update(data).eq("id", car_id).execute()
+    res = supabase.table("cars").update(clean_data).eq("id", car_id).execute()
     return res.data
   except Exception as e:
     print("Грешка при редакция на кола:", str(e))
@@ -210,25 +243,7 @@ def delete_car(car_id: int):
     raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- ЧАСТИ & СНИМКИ ---
-
-
-@app.post("/upload-photo")
-async def upload_photo(file: UploadFile = File(...)):
-  try:
-    file_bytes = await file.read()
-    file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
-    file_name = f"{uuid.uuid4()}.{file_ext}"
-
-    res = supabase.storage.from_("parts-photos").upload(
-        file_name, file_bytes, {"content-type": file.content_type}
-    )
-    public_url = supabase.storage.from_("parts-photos").get_public_url(
-        file_name
-    )
-    return {"photo_url": public_url}
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+# --- ЧАСТИ ---
 
 
 @app.post("/parts")
@@ -236,7 +251,9 @@ def create_part(part: PartCreate):
   try:
     data = to_dict(part)
     data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-    res = supabase.table("parts").insert(data).execute()
+    clean_data = {k: v for k, v in data.items() if v is not None}
+
+    res = supabase.table("parts").insert(clean_data).execute()
     return res.data
   except Exception as e:
     raise HTTPException(status_code=500, detail=str(e))
@@ -246,7 +263,9 @@ def create_part(part: PartCreate):
 def update_part(part_id: int, part: PartCreate):
   try:
     data = to_dict(part)
-    res = supabase.table("parts").update(data).eq("id", part_id).execute()
+    clean_data = {k: v for k, v in data.items() if v is not None}
+
+    res = supabase.table("parts").update(clean_data).eq("id", part_id).execute()
     return res.data
   except Exception as e:
     raise HTTPException(status_code=500, detail=str(e))
