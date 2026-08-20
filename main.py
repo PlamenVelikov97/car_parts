@@ -48,7 +48,7 @@ class CarCreate(BaseModel):
     engine: Optional[str] = None
     fuel_type: Optional[str] = None
     purchase_price: float
-    warehouse_id: int
+    warehouse_id: Optional[int] = None  # Направено незадължително, за да няма срив
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = []
 
@@ -205,8 +205,14 @@ async def get_cars_summary():
 
 @app.post("/cars")
 async def create_car(data: CarCreate):
-    res = supabase.table("cars").insert(data.model_dump()).execute()
-    return res.data
+    try:
+        # exclude_none=True премахва празните null полета, за да не чупят Supabase
+        car_dict = data.model_dump(exclude_none=True)
+        res = supabase.table("cars").insert(car_dict).execute()
+        return res.data
+    except Exception as e:
+        print(f"Грешка при запис на кола: {e}")
+        raise HTTPException(status_code=500, detail=f"Грешка в базата данни: {str(e)}")
 
 @app.delete("/cars/{car_id}")
 async def delete_car(car_id: int):
