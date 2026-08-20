@@ -335,7 +335,7 @@
 </div>
 
 <!-- МОДАЛЕН ДИАЛОГ ЗА ПРЕГЛЕД НА СНИМКИ (LIGHTBOX GALLERY) -->
-<div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="imageModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content bg-dark text-white border-0">
       <div class="modal-header border-0 pb-0">
@@ -370,6 +370,14 @@
 
     document.addEventListener("DOMContentLoaded", function() {
         photoModalInstance = new bootstrap.Modal(document.getElementById('imageModal'));
+        
+        // Премахва фокуса при затваряне, за да няма грешка в конзолата
+        document.getElementById('imageModal').addEventListener('hide.bs.modal', function () {
+            if (document.activeElement) {
+                document.activeElement.blur();
+            }
+        });
+    
         loadWarehouses();
         loadCars();
         loadCarsSummary();
