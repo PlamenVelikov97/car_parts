@@ -1,5 +1,6 @@
 fastapi
 uvicorn
 supabase
-python-multipart
+openai
 pydantic
+python-multipart
