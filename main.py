@@ -12,6 +12,7 @@ from google.genai import types
 
 app = FastAPI()
 
+
 # Разрешаваме CORS за достъп от браузъра
 app.add_middleware(
     CORSMiddleware,
