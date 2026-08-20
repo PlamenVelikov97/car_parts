@@ -82,6 +82,8 @@ async def read_index():
 
 # --- 1. AI АНАЛИЗ С GOOGLE GEMINI ---
 
+# --- 1. AI АНАЛИЗ С GOOGLE GEMINI ---
+
 @app.post("/ai-analyze")
 async def ai_analyze(data: AIAnalyzeRequest):
     if not gemini_client:
@@ -115,9 +117,9 @@ async def ai_analyze(data: AIAnalyzeRequest):
               "oem_number": "OEM номер (ако се вижда ясно сериен номер, иначе null)"
             }"""
 
-        # Подаване на байтовете директно чрез types.Part.from_bytes
+        # Използваме актуалния модел gemini-3.6-flash
         response = gemini_client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents=[
                 types.Part.from_bytes(
                     data=image_bytes,
@@ -136,7 +138,6 @@ async def ai_analyze(data: AIAnalyzeRequest):
     except Exception as e:
         print(f"Грешка при Gemini AI анализа: {e}")
         raise HTTPException(status_code=500, detail=f"Грешка при Gemini AI анализа: {str(e)}")
-
 
 # --- 2. КАЧВАНЕ НА СНИМКИ В SUPABASE BUCKET ---
 
