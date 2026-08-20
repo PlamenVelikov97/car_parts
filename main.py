@@ -231,6 +231,16 @@ def create_part(part: PartCreate):
     raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.put("/parts/{part_id}")
+def update_part(part_id: int, part: PartCreate):
+  try:
+    data = to_dict(part)
+    res = supabase.table("parts").update(data).eq("id", part_id).execute()
+    return res.data
+  except Exception as e:
+    raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/parts/search")
 def search_parts():
   try:
@@ -257,5 +267,14 @@ def sell_part(part_id: int, sell_data: PartSell):
         supabase.table("parts").update(update_data).eq("id", part_id).execute()
     )
     return res.data
+  except Exception as e:
+    raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/parts/{part_id}")
+def delete_part(part_id: int):
+  try:
+    res = supabase.table("parts").delete().eq("id", part_id).execute()
+    return {"message": "Частта е изтрита успешно", "data": res.data}
   except Exception as e:
     raise HTTPException(status_code=500, detail=str(e))
