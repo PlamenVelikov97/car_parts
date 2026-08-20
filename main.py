@@ -165,16 +165,20 @@ def get_cars_summary():
 
 
 @app.post("/cars")
+@app.post("/cars")
 def create_car(car: CarCreate):
   try:
     data = to_dict(car)
     if not data.get("purchase_date"):
       data["purchase_date"] = datetime.now().strftime("%Y-%m-%d")
+
     year_str = f" ({car.year})" if car.year else ""
-    data["title"] = f"{car.make} {car.model}{year_str}"
+    data["title"] = f"{car.make} {car.model}{year_str}".strip()
+
     res = supabase.table("cars").insert(data).execute()
     return res.data
   except Exception as e:
+    print("Грешка при създаване на кола:", str(e))
     raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -182,11 +186,18 @@ def create_car(car: CarCreate):
 def update_car(car_id: int, car: CarCreate):
   try:
     data = to_dict(car)
+
+    # Динамично съставяне на title
     year_str = f" ({car.year})" if car.year else ""
-    data["title"] = f"{car.make} {car.model}{year_str}"
+    data["title"] = f"{car.make} {car.model}{year_str}".strip()
+
+    # Изтриваме None стойности за незадължителните полета, за да не чупят Supabase
+    data = {k: v for k, v in data.items() if v is not None}
+
     res = supabase.table("cars").update(data).eq("id", car_id).execute()
     return res.data
   except Exception as e:
+    print("Грешка при редакция на кола:", str(e))
     raise HTTPException(status_code=500, detail=str(e))
 
 
