@@ -370,7 +370,7 @@
         tbody.innerHTML = '';
 
         parts.forEach(p => {
-            const photo = (p.photo_urls && p.photo_urls.length > 0) ? p.photo_urls[0] : (p.photo_url || 'https://via.placeholder.com/80');
+            const photo = (p.photo_urls && p.photo_urls.length > 0) ? p.photo_urls[0] : (p.photo_url || 'https://placehold.co/80x80?text=No+Image');
             const statusBadge = p.status === 'Продадено' ? 'bg-danger' : 'bg-success';
 
             tbody.innerHTML += `<tr>
