@@ -36,16 +36,11 @@
             transition: all 0.3s ease;
         }
 
-        .custom-card:hover {
-            transform: translateY(-2px);
-        }
-
         .nav-pills .nav-link {
             border-radius: 12px;
             font-weight: 600;
             color: #7090b0;
             padding: 12px 24px;
-            transition: all 0.2s;
         }
 
         .nav-pills .nav-link.active {
@@ -68,11 +63,20 @@
             color: #fff;
         }
 
-        .preview-img { 
-            width: 90px; 
-            height: 90px; 
+        .gallery-container {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .gallery-img { 
+            width: 80px; 
+            height: 80px; 
             object-fit: cover; 
-            border-radius: 14px; 
+            border-radius: 12px; 
+            cursor: pointer;
+            border: 1px solid #e2e8f0;
         }
 
         .badge-available { background-color: #01b574; color: white; }
@@ -97,7 +101,6 @@
 </nav>
 
 <div class="container">
-    <!-- ТАБОВЕ -->
     <ul class="nav nav-pills nav-justified mb-4 p-2 custom-card" id="mainTab" role="tablist">
         <li class="nav-item">
             <button class="nav-link active" id="search-tab" data-bs-toggle="tab" data-bs-target="#search-pane"><i class="fa-solid fa-magnifying-glass me-2"></i>Търсене</button>
@@ -206,8 +209,9 @@
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label fw-semibold">Снимка</label>
-                        <input type="file" id="part_photo_file" class="form-control" accept="image/*" capture="environment">
+                        <label class="form-label fw-semibold">Снимки (До 10 снимки)</label>
+                        <input type="file" id="part_photo_files" class="form-control" accept="image/*" multiple>
+                        <small class="text-muted">Можеш да избереш няколко снимки наведнъж.</small>
                     </div>
 
                     <div class="d-flex gap-2">
@@ -221,7 +225,6 @@
         <!-- 3. УПРАВЛЕНИЕ НА СКЛАДОВЕ И КОЛИ -->
         <div class="tab-pane fade" id="cars-pane">
             <div class="row">
-                <!-- СКЛАДОВЕ -->
                 <div class="col-md-5 mb-4">
                     <div class="custom-card">
                         <h5 class="fw-bold mb-3"><i class="fa-solid fa-warehouse me-2 text-primary"></i>Добави Нов Склад</h5>
@@ -241,35 +244,53 @@
                     </div>
                 </div>
 
-                <!-- КОЛИ -->
                 <div class="col-md-7 mb-4">
                     <div class="custom-card">
                         <h5 class="fw-bold mb-3" id="car-form-title"><i class="fa-solid fa-car me-2 text-primary"></i>Добави Кола-Донор</h5>
                         <form id="car-form" onsubmit="saveCar(event)">
                             <input type="hidden" id="editing_car_id" value="">
                             <div class="row mb-2">
-                                <div class="col-md-4">
+                                <div class="col-md-4 mb-2">
                                     <input type="text" id="car_make" class="form-control" placeholder="Марка (напр. BMW)" required>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-4 mb-2">
                                     <input type="text" id="car_model" class="form-control" placeholder="Модел (напр. E60)" required>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-4 mb-2">
                                     <input type="number" id="car_year" class="form-control" placeholder="Година (напр. 2006)">
                                 </div>
                             </div>
                             <div class="row mb-2">
-                                <div class="col-md-6">
+                                <div class="col-md-6 mb-2">
+                                    <input type="text" id="car_engine" class="form-control" placeholder="Двигател / Кубатура (напр. 3.0d 231hp)">
+                                </div>
+                                <div class="col-md-6 mb-2">
+                                    <select id="car_fuel_type" class="form-select">
+                                        <option value="">-- Гориво --</option>
+                                        <option value="Дизел">Дизел</option>
+                                        <option value="Бензин">Бензин</option>
+                                        <option value="Газ/Бензин">Газ/Бензин</option>
+                                        <option value="Хибрид">Хибрид</option>
+                                        <option value="Електро">Електро</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-md-6 mb-2">
                                     <input type="number" step="0.01" id="car_purchase_price" class="form-control" placeholder="Покупна цена (лв.)" required>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-6 mb-2">
                                     <select id="car_warehouse_id" class="form-select" required>
                                         <option value="">-- Избери Склад --</option>
                                     </select>
                                 </div>
                             </div>
-                            <div class="mb-3">
+                            <div class="mb-2">
                                 <textarea id="car_notes" class="form-control" rows="2" placeholder="Бележки за колата (напр. Ударен заден капак)"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Снимки на Колата (до 10 снимки)</label>
+                                <input type="file" id="car_photo_files" class="form-control" accept="image/*" multiple>
                             </div>
                             <div class="d-flex gap-2">
                                 <button type="submit" id="car-submit-btn" class="btn btn-outline-success btn-sm flex-grow-1 fw-bold py-2">Запази Колата</button>
@@ -280,7 +301,6 @@
                 </div>
             </div>
 
-            <!-- СПИСЪК С КОЛИ И БАЛАНС -->
             <div class="custom-card">
                 <h5 class="fw-bold mb-3"><i class="fa-solid fa-chart-line me-2 text-primary"></i>Налични Коли и Финансов Баланс</h5>
                 <div id="cars-summary-list">
@@ -306,7 +326,6 @@
         searchParts();
     });
 
-    // Красиво форматиране на ISO дати (напр. 2026-08-20T11:52:42.998183+00:00 -> 20.08.2026 г. 14:52 ч.)
     function formatDate(dateStr) {
         if (!dateStr) return 'Няма дата';
         try {
@@ -321,6 +340,27 @@
         } catch (e) {
             return dateStr;
         }
+    }
+
+    async function uploadMultipleFiles(fileInputId) {
+        const fileInput = document.getElementById(fileInputId);
+        if (!fileInput || fileInput.files.length === 0) return [];
+
+        const formData = new FormData();
+        for (let i = 0; i < Math.min(fileInput.files.length, 10); i++) {
+            formData.append('files', fileInput.files[i]);
+        }
+
+        try {
+            const res = await fetch('/upload-photos', { method: 'POST', body: formData });
+            if (res.ok) {
+                const data = await res.json();
+                return data.photo_urls || [];
+            }
+        } catch (e) {
+            console.error("Грешка при качване на снимки:", e);
+        }
+        return [];
     }
 
     async function loadWarehouses() {
@@ -375,9 +415,7 @@
                 document.getElementById('wh_address').value = '';
                 loadWarehouses();
             }
-        } catch (err) {
-            alert('Грешка: ' + err.message);
-        }
+        } catch (err) { alert('Грешка: ' + err.message); }
     }
 
     async function editWarehouse(id, oldName, oldAddress) {
@@ -392,19 +430,15 @@
                 body: JSON.stringify({ name: newName, address: newAddress || null })
             });
             loadWarehouses();
-        } catch (err) {
-            alert('Грешка: ' + err.message);
-        }
+        } catch (err) { alert('Грешка: ' + err.message); }
     }
 
     async function deleteWarehouse(id) {
-        if (!confirm("Сигурни ли сте, че искате да изтриете склада?")) return;
+        if (!confirm("Сигурни ли сте?")) return;
         try {
             await fetch(`/warehouses/${id}`, { method: 'DELETE' });
             loadWarehouses();
-        } catch (err) {
-            alert('Грешка: ' + err.message);
-        }
+        } catch (err) { alert('Грешка: ' + err.message); }
     }
 
     async function loadCars() {
@@ -420,9 +454,7 @@
             });
 
             populateMakeDropdown();
-        } catch (e) {
-            console.error("Грешка при коли:", e);
-        }
+        } catch (e) { console.error("Грешка при коли:", e); }
     }
 
     function onDonorCarSelect() {
@@ -444,9 +476,7 @@
             makeInput.value = selectedCar.make || '';
             modelInput.value = selectedCar.model || '';
             yearInput.value = selectedCar.year || '';
-            if (selectedCar.warehouse_id) {
-                whSelect.value = selectedCar.warehouse_id;
-            }
+            if (selectedCar.warehouse_id) whSelect.value = selectedCar.warehouse_id;
 
             makeInput.disabled = true;
             modelInput.disabled = true;
@@ -474,13 +504,24 @@
     async function saveCar(e) {
         e.preventDefault();
         const carId = document.getElementById('editing_car_id').value;
+        const newPhotoUrls = await uploadMultipleFiles('car_photo_files');
+
+        let currentPhotos = [];
+        if (carId) {
+            const existingCar = globalCars.find(c => c.id == carId);
+            if (existingCar && existingCar.photo_urls) currentPhotos = existingCar.photo_urls;
+        }
+
         const data = {
             make: document.getElementById('car_make').value,
             model: document.getElementById('car_model').value,
             year: parseInt(document.getElementById('car_year').value) || null,
+            engine: document.getElementById('car_engine').value || null,
+            fuel_type: document.getElementById('car_fuel_type').value || null,
             purchase_price: parseFloat(document.getElementById('car_purchase_price').value),
             warehouse_id: parseInt(document.getElementById('car_warehouse_id').value),
-            notes: document.getElementById('car_notes').value || null
+            notes: document.getElementById('car_notes').value || null,
+            photo_urls: [...currentPhotos, ...newPhotoUrls]
         };
 
         const url = carId ? `/cars/${carId}` : '/cars';
@@ -498,9 +539,7 @@
                 loadCars();
                 loadCarsSummary();
             }
-        } catch (err) {
-            alert('Грешка: ' + err.message);
-        }
+        } catch (err) { alert('Грешка: ' + err.message); }
     }
 
     function editCar(carId) {
@@ -511,6 +550,8 @@
         document.getElementById('car_make').value = car.make || '';
         document.getElementById('car_model').value = car.model || '';
         document.getElementById('car_year').value = car.year || '';
+        document.getElementById('car_engine').value = car.engine || '';
+        document.getElementById('car_fuel_type').value = car.fuel_type || '';
         document.getElementById('car_purchase_price').value = car.purchase_price || '';
         document.getElementById('car_warehouse_id').value = car.warehouse_id || '';
         document.getElementById('car_notes').value = car.notes || '';
@@ -540,14 +581,24 @@
             cars.forEach(c => {
                 const profitClass = c.net_profit >= 0 ? 'text-success' : 'text-danger';
                 const whName = c.warehouses ? c.warehouses.name : 'Без склад';
+                const engineInfo = c.engine || c.fuel_type ? `<small class="badge bg-secondary me-2">${c.engine || ''} ${c.fuel_type || ''}</small>` : '';
                 const notesText = c.notes ? `<div class="notes-box mt-2"><i class="fa-regular fa-note-sticky me-1"></i>${c.notes}</div>` : '';
+
+                let photosGallery = '';
+                if (c.photo_urls && c.photo_urls.length > 0) {
+                    photosGallery = '<div class="gallery-container mt-2">';
+                    c.photo_urls.forEach(url => {
+                        photosGallery += `<img src="${url}" class="gallery-img" onclick="window.open('${url}', '_blank')">`;
+                    });
+                    photosGallery += '</div>';
+                }
 
                 container.innerHTML += `
                     <div class="border-0 bg-light rounded-4 p-3 mb-3">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <h5 class="mb-0 fw-bold">🚗 ${c.title}</h5>
-                                <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>${whName} | <i class="fa-regular fa-calendar me-1"></i>Купена: ${formatDate(c.purchase_date)}</small>
+                                <div class="mt-1">${engineInfo} <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>${whName} | <i class="fa-regular fa-calendar me-1"></i>Купена: ${formatDate(c.purchase_date)}</small></div>
                             </div>
                             <div>
                                 <button class="btn btn-sm btn-outline-primary me-1 fw-bold" onclick="editCar(${c.id})"><i class="fa-solid fa-pen"></i></button>
@@ -556,6 +607,7 @@
                             </div>
                         </div>
                         ${notesText}
+                        ${photosGallery}
                         <div class="row text-center mt-3 pt-2 border-top">
                             <div class="col-4"><small class="text-muted">Покупна цена</small><br><strong class="fs-6">${c.purchase_price} лв.</strong></div>
                             <div class="col-4"><small class="text-muted">Продажби</small><br><strong class="fs-6 text-primary">${c.total_sales} лв.</strong></div>
@@ -600,9 +652,7 @@
             }
             searchParts();
             loadCarsSummary();
-        } catch (err) {
-            alert('Грешка: ' + err.message);
-        }
+        } catch (err) { alert('Грешка: ' + err.message); }
     }
 
     async function deleteCar(id) {
@@ -611,28 +661,25 @@
             await fetch(`/cars/${id}`, { method: 'DELETE' });
             loadCars();
             loadCarsSummary();
-        } catch (err) {
-            alert('Грешка: ' + err.message);
-        }
+        } catch (err) { alert('Грешка: ' + err.message); }
     }
 
     async function savePart(e) {
         e.preventDefault();
         const partId = document.getElementById('editing_part_id').value;
-        let photo_url = null;
+        const newPhotoUrls = await uploadMultipleFiles('part_photo_files');
 
-        const fileInput = document.getElementById('part_photo_file');
-        if (fileInput.files.length > 0) {
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            try {
-                const uploadRes = await fetch('/upload-photo', { method: 'POST', body: formData });
-                if (uploadRes.ok) photo_url = (await uploadRes.json()).photo_url;
-            } catch (err) { console.error(err); }
+        let currentPhotos = [];
+        if (partId) {
+            const existingPart = globalParts.find(p => p.id == partId);
+            if (existingPart && existingPart.photo_urls) currentPhotos = existingPart.photo_urls;
+            else if (existingPart && existingPart.photo_url) currentPhotos = [existingPart.photo_url];
         }
 
         const carIdVal = document.getElementById('part_car_id').value;
         const whIdVal = document.getElementById('part_warehouse_id').value;
+
+        const allPhotos = [...currentPhotos, ...newPhotoUrls];
 
         const partData = {
             title: document.getElementById('part_title').value,
@@ -643,10 +690,10 @@
             price: parseFloat(document.getElementById('part_price').value),
             warehouse_id: whIdVal ? parseInt(whIdVal) : null,
             car_id: carIdVal ? parseInt(carIdVal) : null,
-            notes: document.getElementById('part_notes').value || null
+            notes: document.getElementById('part_notes').value || null,
+            photo_urls: allPhotos,
+            photo_url: allPhotos.length > 0 ? allPhotos[0] : null
         };
-
-        if (photo_url) partData.photo_url = photo_url;
 
         const url = partId ? `/parts/${partId}` : '/parts';
         const method = partId ? 'PUT' : 'POST';
@@ -664,13 +711,10 @@
                 searchParts();
                 loadCarsSummary();
 
-                // Превключваме обратно на таб Търсене
                 const searchTab = new bootstrap.Tab(document.getElementById('search-tab'));
                 searchTab.show();
             }
-        } catch (err) {
-            alert('Грешка: ' + err.message);
-        }
+        } catch (err) { alert('Грешка: ' + err.message); }
     }
 
     function editPart(partId) {
@@ -681,7 +725,7 @@
         document.getElementById('part_title').value = part.title || '';
         document.getElementById('part_car_id').value = part.car_id || '';
         
-        onDonorCarSelect(); // Обновява затворените/отворените полета
+        onDonorCarSelect();
 
         if (!part.car_id) {
             document.getElementById('part_make').value = part.make || '';
@@ -751,7 +795,17 @@
 
             container.innerHTML = '';
             filtered.forEach(p => {
-                const imgTag = p.photo_url ? `<img src="${p.photo_url}" class="preview-img me-3">` : '';
+                const photos = (p.photo_urls && p.photo_urls.length > 0) ? p.photo_urls : (p.photo_url ? [p.photo_url] : []);
+                
+                let photosGallery = '';
+                if (photos.length > 0) {
+                    photosGallery = '<div class="gallery-container me-md-3 mb-2 mb-md-0">';
+                    photos.forEach(url => {
+                        photosGallery += `<img src="${url}" class="gallery-img" onclick="window.open('${url}', '_blank')">`;
+                    });
+                    photosGallery += '</div>';
+                }
+
                 const makeStr = p.make || (p.cars ? p.cars.make : '');
                 const modelStr = p.model || (p.cars ? p.cars.model : '');
                 const yearStr = p.year || (p.cars ? p.cars.year : '');
@@ -768,7 +822,7 @@
 
                 container.innerHTML += `
                     <div class="custom-card mb-3 d-flex flex-column flex-md-row align-items-start align-items-md-center">
-                        ${imgTag}
+                        ${photosGallery}
                         <div class="flex-grow-1 my-2 my-md-0">
                             <h5 class="fw-bold mb-1">${p.title} <span class="badge bg-light text-dark border ms-2 fs-6">${autoInfo}</span></h5>
                             <p class="mb-1 text-muted"><small>OEM: ${p.oem_number || 'Няма'} | <i class="fa-solid fa-warehouse me-1"></i>${whName}</small></p>
@@ -803,9 +857,7 @@
             });
             searchParts();
             loadCarsSummary();
-        } catch (err) {
-            alert('Грешка: ' + err.message);
-        }
+        } catch (err) { alert('Грешка: ' + err.message); }
     }
 
     async function deletePart(partId) {
@@ -814,9 +866,7 @@
             await fetch(`/parts/${partId}`, { method: 'DELETE' });
             searchParts();
             loadCarsSummary();
-        } catch (err) {
-            alert('Грешка: ' + err.message);
-        }
+        } catch (err) { alert('Грешка: ' + err.message); }
     }
 </script>
 
