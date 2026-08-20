@@ -1,12 +1,14 @@
 import os
 import json
+import urllib.request
 from typing import Optional, List
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from supabase import create_client, Client
-from openai import OpenAI
+from google import genai
+from google.genai import types
 
 app = FastAPI()
 
@@ -22,18 +24,14 @@ app.add_middleware(
 # 1. Инициализация на Supabase
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    print("ВНИМАНИЕ: Липсват SUPABASE_URL или SUPABASE_KEY в Environment Variables!")
-
 supabase: Client = create_client(SUPABASE_URL or "", SUPABASE_KEY or "")
 
-# 2. Инициализация на OpenAI
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+# 2. Инициализация на Google Gemini
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+gemini_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 
-# --- PYDANTIC МОДЕЛИ ЗА ВЪВЕЖДАНЕ НА ДАННИ ---
+# --- PYDANTIC МОДЕЛИ ---
 
 class AIAnalyzeRequest(BaseModel):
     image_url: str
@@ -75,63 +73,68 @@ class SellPartRequest(BaseModel):
 # --- ОСНОВЕН РУТ ЗА УЕБ СТРАНИЦАТА ---
 
 @app.get("/")
+@app.get("/ui")
 async def read_index():
     if os.path.exists("index.html"):
         return FileResponse("index.html")
     return {"message": "Auto Parts API is running!"}
 
 
-# --- 1. AI АНАЛИЗ НА СНИМКИ (OPENAI VISION) ---
+# --- 1. AI АНАЛИЗ С GOOGLE GEMINI ---
 
 @app.post("/ai-analyze")
 async def ai_analyze(data: AIAnalyzeRequest):
-    if not openai_client:
-        raise HTTPException(status_code=500, detail="OPENAI_API_KEY не е конфигуриран в Render!")
+    if not gemini_client:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY не е конфигуриран в Render!")
 
     if not data.image_url:
         raise HTTPException(status_code=400, detail="Няма предоставена снимка.")
 
-    if data.type == 'car':
-        prompt = """Анализирай тази снимка на автомобил. Върни САМО валиден JSON обект (без допълнителен маркдаун или текст) със следните полета:
-        {
-          "make": "Марка (напр. BMW, Audi, VW)",
-          "model": "Модел (напр. 320, A4, Golf)",
-          "year": Година като число (ако може да се определи от поколението, иначе null),
-          "engine": "Обем/Двигател (ако личи надпис, иначе null)",
-          "fuel_type": "Дизел/Бензин/Електро/null"
-        }"""
-    else:
-        prompt = """Анализирай тази снимка на авточаст. Върни САМО валиден JSON обект (без допълнителен маркдаун или текст) със следните полета:
-        {
-          "title": "Точно наименование на частта на български (напр. Предна броня, Алтернатор, Скоростна кутия)",
-          "make": "Марка на автомобила (ако има емблема/лого, иначе null)",
-          "model": "Модел автомобил (ако личи, иначе null)",
-          "year": Година като число (ако личи, иначе null),
-          "oem_number": "OEM номер (ако се вижда ясно сериен номер, иначе null)"
-        }"""
-
     try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": data.image_url}}
-                    ]
-                }
-            ],
-            response_format={"type": "json_object"},
-            max_tokens=300
+        # Изтегляме снимката от Supabase URL адреса
+        req = urllib.request.Request(data.image_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            image_bytes = response.read()
+
+        image_part = types.Part.from_bytes(
+            data=image_bytes,
+            mime_type="image/jpeg",
         )
 
-        result_json = json.loads(response.choices[0].message.content)
+        if data.type == 'car':
+            prompt = """Анализирай тази снимка на автомобил. Върни САМО валиден JSON обект със следните полета:
+            {
+              "make": "Марка (напр. BMW, Audi, VW)",
+              "model": "Модел (напр. 320, A4, Golf)",
+              "year": Година като число (ако може да се определи от поколението, иначе null),
+              "engine": "Обем/Двигател (ако личи надпис, иначе null)",
+              "fuel_type": "Дизел/Бензин/Електро/null"
+            }"""
+        else:
+            prompt = """Анализирай тази снимка на авточаст. Върни САМО валиден JSON обект със следните полета:
+            {
+              "title": "Точно наименование на частта на български (напр. Предна броня, Алтернатор, Скоростна кутия)",
+              "make": "Марка на автомобила (ако има емблема/лого, иначе null)",
+              "model": "Модел автомобил (ако личи, иначе null)",
+              "year": Година като число (ако личи, иначе null),
+              "oem_number": "OEM номер (ако се вижда ясно сериен номер, иначе null)"
+            }"""
+
+        # Изпращаме снимката и промпта към Gemini 2.5
+        response = gemini_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[prompt, image_part],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+
+        result_json = json.loads(response.text)
         return result_json
 
     except Exception as e:
-        print(f"Грешка при AI анализа: {e}")
-        raise HTTPException(status_code=500, detail=f"Грешка при AI анализа: {str(e)}")
+        print(f"Грешка при Gemini AI анализа: {e}")
+        raise HTTPException(status_code=500, detail=f"Грешка при Gemini AI анализа: {str(e)}")
 
 
 # --- 2. КАЧВАНЕ НА СНИМКИ В SUPABASE BUCKET ---
@@ -143,18 +146,15 @@ async def upload_photos(files: List[UploadFile] = File(...)):
     for file in files:
         try:
             file_bytes = await file.read()
-            # Генерираме уникално име за файла
             file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
             file_name = f"part_{os.urandom(8).hex()}.{file_ext}"
 
-            # Качваме в Supabase Storage (Bucket с име 'parts-photos')
-            res = supabase.storage.from_("parts-photos").upload(
+            supabase.storage.from_("parts-photos").upload(
                 file_name,
                 file_bytes,
                 file_options={"content-type": file.content_type or "image/jpeg"}
             )
 
-            # Вземаме публичния URL адрес на качения файл
             public_url = supabase.storage.from_("parts-photos").get_public_url(file_name)
             uploaded_urls.append(public_url)
         except Exception as e:
@@ -172,12 +172,7 @@ async def get_warehouses():
 
 @app.post("/warehouses")
 async def create_warehouse(data: WarehouseCreate):
-    res = supabase.table("warehouses").insert(data.dict()).execute()
-    return res.data
-
-@app.put("/warehouses/{wh_id}")
-async def update_warehouse(wh_id: int, data: WarehouseCreate):
-    res = supabase.table("warehouses").update(data.dict()).eq("id", wh_id).execute()
+    res = supabase.table("warehouses").insert(data.model_dump()).execute()
     return res.data
 
 @app.delete("/warehouses/{wh_id}")
@@ -188,14 +183,8 @@ async def delete_warehouse(wh_id: int):
 
 # --- 4. КОЛИ - ДОНОРИ (CARS) ---
 
-@app.get("/cars")
-async def get_cars():
-    res = supabase.table("cars").select("*, warehouses(*)").execute()
-    return res.data
-
 @app.get("/cars/summary")
 async def get_cars_summary():
-    # Вземаме коли с финансови изчисления (продажби и печалба)
     cars_res = supabase.table("cars").select("*, warehouses(*)").execute()
     parts_res = supabase.table("parts").select("car_id, price, sold_price, status").execute()
     
@@ -214,12 +203,7 @@ async def get_cars_summary():
 
 @app.post("/cars")
 async def create_car(data: CarCreate):
-    res = supabase.table("cars").insert(data.dict()).execute()
-    return res.data
-
-@app.put("/cars/{car_id}")
-async def update_car(car_id: int, data: CarCreate):
-    res = supabase.table("cars").update(data.dict()).eq("id", car_id).execute()
+    res = supabase.table("cars").insert(data.model_dump()).execute()
     return res.data
 
 @app.delete("/cars/{car_id}")
@@ -237,20 +221,14 @@ async def search_parts():
 
 @app.post("/parts")
 async def create_part(data: PartCreate):
-    res = supabase.table("parts").insert(data.dict()).execute()
-    return res.data
-
-@app.put("/parts/{part_id}")
-async def update_part(part_id: int, data: PartCreate):
-    res = supabase.table("parts").update(data.dict()).eq("id", part_id).execute()
+    res = supabase.table("parts").insert(data.model_dump()).execute()
     return res.data
 
 @app.put("/parts/{part_id}/sell")
 async def sell_part(part_id: int, data: SellPartRequest):
     update_data = {
         "status": "Продадено",
-        "sold_price": data.sold_price,
-        "sold_date": "now()"
+        "sold_price": data.sold_price
     }
     res = supabase.table("parts").update(update_data).eq("id", part_id).execute()
     return res.data
