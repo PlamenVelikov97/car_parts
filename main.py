@@ -8,6 +8,7 @@ import cloudinary.uploader
 import os
 import json
 
+
 app = FastAPI()
 
 # --- 1. КОНФИГУРАЦИЯ НА ВЪНШНИ УСЛУГИ ---
