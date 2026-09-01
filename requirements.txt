@@ -1,7 +1,8 @@
 fastapi
 uvicorn
-pydantic
-supabase
-google-generativeai
-cloudinary
+jinja2
 python-multipart
+requests
+supabase
+cloudinary
+google-genai
