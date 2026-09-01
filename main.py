@@ -26,7 +26,7 @@ if CLOUDINARY_URL:
     cloudinary.config(cloudinary_url=CLOUDINARY_URL)
 
 
-# --- 2. СЕРВИРАНЕ НА НАЧАЛНАТА СТРАНИЦА (INDEX.HTML) ---
+# --- 2. СЕРВИРАНЕ НА НАЧАЛНАТА СТРАНИЦА ---
 
 @app.get("/", response_class=HTMLResponse)
 async def read_index():
@@ -65,6 +65,7 @@ class CarUpdate(BaseModel):
     notes: Optional[str] = None
     status: Optional[str] = None
     scrap_price: Optional[float] = None
+    photo_urls: Optional[List[str]] = None
 
 class PartCreate(BaseModel):
     title: str
@@ -88,6 +89,7 @@ class PartUpdate(BaseModel):
     warehouse_id: Optional[int] = None
     car_id: Optional[int] = None
     notes: Optional[str] = None
+    photo_urls: Optional[List[str]] = None
 
 class PartSell(BaseModel):
     sold_price: float
@@ -96,7 +98,7 @@ class ScrapCar(BaseModel):
     scrap_price: float
 
 class AiAnalyzeRequest(BaseModel):
-    image_url: str
+    photo_url: str
     type: str
 
 
@@ -273,6 +275,9 @@ async def get_financials():
 
 @app.post("/upload-photos")
 async def upload_photos(files: List[UploadFile] = File(...)):
+    if not CLOUDINARY_URL:
+        raise HTTPException(status_code=500, detail="Променливата CLOUDINARY_URL липсва в Render!")
+    
     photo_urls = []
     try:
         for file in files:
@@ -281,25 +286,31 @@ async def upload_photos(files: List[UploadFile] = File(...)):
             photo_urls.append(upload_result.get("secure_url"))
         return {"photo_urls": photo_urls}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Грешка при качване на снимка: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Грешка Cloudinary: {str(e)}")
 
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="Gemini API key липсва")
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY липсва в Render!")
 
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        prompt = "Анализирай тази снимка и върни JSON обект."
+        
+        if req.type == "car":
+            prompt = "Анализирай снимката на колата и върни САМО валиден JSON обект с ключове: make (марка), model (модел), year (година като число или null), engine (двигател или null), fuel_type (гориво - Дизел, Бензин, Газ/Бензин или null). Не слагай нищо друго освен JSON."
+        else:
+            prompt = "Анализирай снимката на авточастта и върни САМО валиден JSON обект с ключове: title (име на частта на български), make (марка кола), model (модел кола), year (година като число или null), oem_number (OEM номер или null). Не слагай нищо друго освен JSON."
 
         import urllib.request
-        with urllib.request.urlopen(req.image_url) as response:
+        with urllib.request.urlopen(req.photo_url) as response:
             image_data = response.read()
 
         image_part = {"mime_type": "image/jpeg", "data": image_data}
         response = model.generate_content([prompt, image_part])
-        cleaned_text = response.text.strip().replace("```json", "").replace("```", "")
-        return json.loads(cleaned_text)
+        cleaned_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        
+        result_data = json.loads(cleaned_text)
+        return {"result": result_data}
 
     except Exception as e:
-        return {}
+        raise HTTPException(status_code=500, detail=f"Грешка AI Анализ: {str(e)}")
