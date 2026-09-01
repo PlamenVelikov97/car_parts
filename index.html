@@ -92,6 +92,7 @@
             <div class="modal-body">
                 <form id="carForm">
                     <input type="hidden" id="car_id">
+                    <div id="car_ai_status" class="mb-2"></div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Марка</label>
@@ -160,6 +161,7 @@
             <div class="modal-body">
                 <form id="partForm">
                     <input type="hidden" id="part_id">
+                    <div id="part_ai_status" class="mb-2"></div>
                     <div class="mb-3">
                         <label class="form-label">Наименование на частта</label>
                         <input type="text" id="part_title" class="form-control" required placeholder="напр. Задна броня">
@@ -250,6 +252,8 @@
     const carModal = new bootstrap.Modal(document.getElementById('carModal'));
     const partModal = new bootstrap.Modal(document.getElementById('partModal'));
     const whModal = new bootstrap.Modal(document.getElementById('warehouseModal'));
+
+    const defaultImg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='180' viewBox='0 0 300 180'%3E%3Crect width='100%25' height='100%25' fill='%23e9ecef'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%236c757d'%3EНяма Снимка%3C/text%3E%3C/svg%3E";
 
     function showTab(tabName) {
         document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
@@ -350,7 +354,7 @@
 
         globalCars.forEach(c => {
             const photos = c.photo_urls || [];
-            const mainImg = photos.length > 0 ? photos[0] : 'https://via.placeholder.com/300x180?text=Няма+Снимка';
+            const mainImg = (photos && photos.length > 0) ? photos[0] : defaultImg;
             const statusBadge = c.status === 'Скрап' ? '<span class="badge bg-secondary">Скрап</span>' : '<span class="badge bg-success">Наличен</span>';
 
             container.innerHTML += `
@@ -390,6 +394,7 @@
     function openCarModal() {
         document.getElementById('car_id').value = '';
         document.getElementById('carForm').reset();
+        document.getElementById('car_ai_status').innerHTML = '';
         carPhotos = [];
         renderPhotoPreview('car');
         document.getElementById('carModalTitle').innerText = 'Добави Кола';
@@ -408,6 +413,7 @@
         document.getElementById('car_price').value = car.purchase_price || '';
         document.getElementById('car_warehouse').value = car.warehouse_id || '';
         document.getElementById('car_notes').value = car.notes || '';
+        document.getElementById('car_ai_status').innerHTML = '';
         carPhotos = car.photo_urls || [];
         renderPhotoPreview('car');
         document.getElementById('carModalTitle').innerText = 'Редактирай Кола';
@@ -471,7 +477,7 @@
 
         parts.forEach(p => {
             const photos = p.photo_urls || [];
-            const mainImg = photos.length > 0 ? photos[0] : 'https://via.placeholder.com/300x180?text=Няма+Снимка';
+            const mainImg = (photos && photos.length > 0) ? photos[0] : defaultImg;
             const isSold = p.status === 'Продадено';
 
             container.innerHTML += `
@@ -502,6 +508,7 @@
     function openPartModal() {
         document.getElementById('part_id').value = '';
         document.getElementById('partForm').reset();
+        document.getElementById('part_ai_status').innerHTML = '';
         partPhotos = [];
         renderPhotoPreview('part');
         document.getElementById('partModalTitle').innerText = 'Добави Авточаст';
@@ -524,6 +531,7 @@
         document.getElementById('part_car').value = part.car_id || '';
         document.getElementById('part_warehouse').value = part.warehouse_id || '';
         document.getElementById('part_notes').value = part.notes || '';
+        document.getElementById('part_ai_status').innerHTML = '';
         partPhotos = part.photo_urls || [];
         renderPhotoPreview('part');
 
@@ -583,25 +591,38 @@
     async function uploadPhotos(type) {
         const fileInput = document.getElementById(`${type}_photos_file`);
         const files = fileInput.files;
-        if(files.length === 0) return;
+        if (!files || files.length === 0) return;
+
+        const previewContainer = document.getElementById(`${type}_photos_preview`);
+        previewContainer.innerHTML = '<span class="text-primary fw-bold">Качване на снимките, моля изчакайте... ⏳</span>';
 
         const formData = new FormData();
-        for(let i = 0; i < files.length; i++) {
+        for (let i = 0; i < files.length; i++) {
             formData.append('files', files[i]);
         }
 
-        const res = await fetch('/upload-photos', { method: 'POST', body: formData });
-        const data = await res.json();
+        try {
+            const res = await fetch('/upload-photos', { method: 'POST', body: formData });
+            const data = await res.json();
 
-        if(data.photo_urls) {
-            if(type === 'car') carPhotos.push(...data.photo_urls);
-            else partPhotos.push(...data.photo_urls);
-            renderPhotoPreview(type);
+            if (!res.ok) {
+                alert('Грешка при качване: ' + (data.detail || JSON.stringify(data)));
+                renderPhotoPreview(type);
+                return;
+            }
 
-            // Пускаме AI Анализ за първата качена снимка
-            if(data.photo_urls.length > 0) {
+            if (data.photo_urls && data.photo_urls.length > 0) {
+                if (type === 'car') carPhotos.push(...data.photo_urls);
+                else partPhotos.push(...data.photo_urls);
+                
+                renderPhotoPreview(type);
+
+                // Автоматично стартираме AI Анализ за първата качена снимка
                 runAiAnalyze(data.photo_urls[0], type);
             }
+        } catch (err) {
+            alert('Грешка при връзката със сървъра при качване: ' + err.message);
+            renderPhotoPreview(type);
         }
     }
 
@@ -625,30 +646,43 @@
         renderPhotoPreview(type);
     }
 
-    async function runAiAnalyze(imageUrl, type) {
+    async function runAiAnalyze(photoUrl, type) {
+        const aiBox = document.getElementById(`${type}_ai_status`);
+        if (aiBox) {
+            aiBox.innerHTML = '<div class="alert alert-info py-2">🤖 AI разпознава данни от снимката... ⏳</div>';
+        }
+
         try {
             const res = await fetch('/ai-analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image_url: imageUrl, type: type })
+                body: JSON.stringify({ photo_url: photoUrl, type: type })
             });
+            
             const data = await res.json();
 
-            if(type === 'car') {
-                if(data.make) document.getElementById('car_make').value = data.make;
-                if(data.model) document.getElementById('car_model').value = data.model;
-                if(data.year) document.getElementById('car_year').value = data.year;
-                if(data.engine) document.getElementById('car_engine').value = data.engine;
-                if(data.fuel_type) document.getElementById('car_fuel').value = data.fuel_type;
-            } else {
-                if(data.title) document.getElementById('part_title').value = data.title;
-                if(data.make) document.getElementById('part_make').value = data.make;
-                if(data.model) document.getElementById('part_model').value = data.model;
-                if(data.year) document.getElementById('part_year').value = data.year;
-                if(data.oem_number) document.getElementById('part_oem').value = data.oem_number;
+            if (!res.ok) {
+                if (aiBox) aiBox.innerHTML = `<div class="alert alert-warning py-2">Грешка AI: ${data.detail || 'Не можа да се анализира'}</div>`;
+                return;
             }
-        } catch(e) {
-            console.log('AI Анализ не успя да приключи:', e);
+
+            if (aiBox) aiBox.innerHTML = '<div class="alert alert-success py-2">✓ AI Полетата бяха попълнени автоматично!</div>';
+
+            if (type === 'car' && data.result) {
+                if (data.result.make) document.getElementById('car_make').value = data.result.make;
+                if (data.result.model) document.getElementById('car_model').value = data.result.model;
+                if (data.result.year) document.getElementById('car_year').value = data.result.year;
+                if (data.result.engine) document.getElementById('car_engine').value = data.result.engine;
+                if (data.result.fuel_type) document.getElementById('car_fuel').value = data.result.fuel_type;
+            } else if (type === 'part' && data.result) {
+                if (data.result.title) document.getElementById('part_title').value = data.result.title;
+                if (data.result.make) document.getElementById('part_make').value = data.result.make;
+                if (data.result.model) document.getElementById('part_model').value = data.result.model;
+                if (data.result.year) document.getElementById('part_year').value = data.result.year;
+                if (data.result.oem_number) document.getElementById('part_oem').value = data.result.oem_number;
+            }
+        } catch (err) {
+            if (aiBox) aiBox.innerHTML = `<div class="alert alert-danger py-2">Грешка връзка с AI: ${err.message}</div>`;
         }
     }
 
