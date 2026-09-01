@@ -12,7 +12,6 @@ from google.genai import types
 
 app = FastAPI()
 
-
 # Разрешаваме CORS за достъп от браузъра
 app.add_middleware(
     CORSMiddleware,
@@ -49,7 +48,7 @@ class CarCreate(BaseModel):
     engine: Optional[str] = None
     fuel_type: Optional[str] = None
     purchase_price: float
-    warehouse_id: Optional[int] = None  # Направено незадължително, за да няма срив
+    warehouse_id: Optional[int] = None
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = []
 
@@ -80,8 +79,6 @@ async def read_index():
         return FileResponse("index.html")
     return {"message": "Auto Parts API is running!"}
 
-
-# --- 1. AI АНАЛИЗ С GOOGLE GEMINI ---
 
 # --- 1. AI АНАЛИЗ С GOOGLE GEMINI ---
 
@@ -118,7 +115,6 @@ async def ai_analyze(data: AIAnalyzeRequest):
               "oem_number": "OEM номер (ако се вижда ясно сериен номер, иначе null)"
             }"""
 
-        # Използваме актуалния модел gemini-3.6-flash
         response = gemini_client.models.generate_content(
             model='gemini-3.6-flash',
             contents=[
@@ -139,6 +135,7 @@ async def ai_analyze(data: AIAnalyzeRequest):
     except Exception as e:
         print(f"Грешка при Gemini AI анализа: {e}")
         raise HTTPException(status_code=500, detail=f"Грешка при Gemini AI анализа: {str(e)}")
+
 
 # --- 2. КАЧВАНЕ НА СНИМКИ В SUPABASE BUCKET ---
 
@@ -175,8 +172,11 @@ async def get_warehouses():
 
 @app.post("/warehouses")
 async def create_warehouse(data: WarehouseCreate):
-    res = supabase.table("warehouses").insert(data.model_dump()).execute()
-    return res.data
+    try:
+        res = supabase.table("warehouses").insert(data.model_dump(exclude_none=True)).execute()
+        return res.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Грешка в базата: {str(e)}")
 
 @app.delete("/warehouses/{wh_id}")
 async def delete_warehouse(wh_id: int):
@@ -207,7 +207,6 @@ async def get_cars_summary():
 @app.post("/cars")
 async def create_car(data: CarCreate):
     try:
-        # exclude_none=True премахва празните null полета, за да не чупят Supabase
         car_dict = data.model_dump(exclude_none=True)
         res = supabase.table("cars").insert(car_dict).execute()
         return res.data
@@ -230,8 +229,12 @@ async def search_parts():
 
 @app.post("/parts")
 async def create_part(data: PartCreate):
-    res = supabase.table("parts").insert(data.model_dump()).execute()
-    return res.data
+    try:
+        part_dict = data.model_dump(exclude_none=True)
+        res = supabase.table("parts").insert(part_dict).execute()
+        return res.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Грешка в базата данни: {str(e)}")
 
 @app.put("/parts/{part_id}/sell")
 async def sell_part(part_id: int, data: SellPartRequest):
