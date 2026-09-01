@@ -208,6 +208,10 @@ async def get_cars_summary():
 async def create_car(data: CarCreate):
     try:
         car_dict = data.model_dump(exclude_none=True)
+        
+        # Автоматично генерираме задължителното поле "title"
+        car_dict["title"] = f"{data.make} {data.model}".strip()
+
         res = supabase.table("cars").insert(car_dict).execute()
         return res.data
     except Exception as e:
