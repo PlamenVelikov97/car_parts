@@ -1,45 +1,47 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
-from typing import Optional, List
-from supabase import create_client, Client
-import google.generativeai as genai
-import cloudinary
-import cloudinary.uploader
 import os
 import json
+import base64
+from typing import List, Optional
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+from supabase import create_client, Client
+import cloudinary
+import cloudinary.uploader
+import google.generativeai as genai
 
+# === ИНИЦИАЛИЗАЦИЯ НА FASTAPI И JINJA2 ===
+app = FastAPI(title="Автоморга Мениджър")
+templates = Jinja2Templates(directory="templates")
 
-app = FastAPI()
+# === НАСТРОЙКИ НА ВЪНШНИ УСЛУГИ (ENV VARIABLES) ===
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
-# --- 1. КОНФИГУРАЦИЯ НА ВЪНШНИ УСЛУГИ ---
+# Свързване с Supabase
+supabase: Optional[Client] = None
+if SUPABASE_URL and SUPABASE_KEY:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
+# Свързване с Cloudinary
+if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY,
+        api_secret=CLOUDINARY_API_SECRET
+    )
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# Свързване с Gemini AI
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "")
-if CLOUDINARY_URL:
-    cloudinary.config(cloudinary_url=CLOUDINARY_URL)
 
-
-# --- 2. СЕРВИРАНЕ НА НАЧАЛНАТА СТРАНИЦА ---
-
-@app.get("/", response_class=HTMLResponse)
-async def read_index():
-    try:
-        with open("index.html", "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        return "<h1>Грешка: Файлът index.html не е намерен в главната директория.</h1>"
-
-
-# --- 3. PUDANTIC МОДЕЛИ ---
-
+# === PYDANTIC МОДЕЛИ ===
 class WarehouseCreate(BaseModel):
     name: str
     address: Optional[str] = None
@@ -55,18 +57,8 @@ class CarCreate(BaseModel):
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = []
 
-class CarUpdate(BaseModel):
-    make: Optional[str] = None
-    model: Optional[str] = None
-    year: Optional[int] = None
-    engine: Optional[str] = None
-    fuel_type: Optional[str] = None
-    purchase_price: Optional[float] = None
-    warehouse_id: Optional[int] = None
-    notes: Optional[str] = None
-    status: Optional[str] = None
-    scrap_price: Optional[float] = None
-    photo_urls: Optional[List[str]] = None
+class CarScrap(BaseModel):
+    scrap_price: float
 
 class PartCreate(BaseModel):
     title: str
@@ -75,243 +67,252 @@ class PartCreate(BaseModel):
     year: Optional[int] = None
     oem_number: Optional[str] = None
     price: float
-    warehouse_id: Optional[int] = None
     car_id: Optional[int] = None
+    warehouse_id: Optional[int] = None
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = []
-
-class PartUpdate(BaseModel):
-    title: Optional[str] = None
-    make: Optional[str] = None
-    model: Optional[str] = None
-    year: Optional[int] = None
-    oem_number: Optional[str] = None
-    price: Optional[float] = None
-    warehouse_id: Optional[int] = None
-    car_id: Optional[int] = None
-    notes: Optional[str] = None
-    photo_urls: Optional[List[str]] = None
 
 class PartSell(BaseModel):
     sold_price: float
 
-class ScrapCar(BaseModel):
-    scrap_price: float
-
 class AiAnalyzeRequest(BaseModel):
     photo_url: str
-    type: str
+    type: str  # 'car' или 'part'
 
 
-# --- 4. СКЛАДОВЕ ---
+# === ВЕРИФИКАЦИЯ НА SUPABASE ===
+def check_db():
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Липсва връзка с Supabase база данни.")
 
+
+# === HTML РЕНДЕРИРАНЕ ===
+@app.get("/", response_class=HTMLResponse)
+def read_root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+
+# === 1. СКЛАДОВЕ ===
 @app.get("/warehouses")
-async def get_warehouses():
-    try:
-        res = supabase.table("warehouses").select("*").execute()
-        return res.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def get_warehouses():
+    check_db()
+    res = supabase.table("warehouses").select("*").order("id").execute()
+    return res.data
 
 @app.post("/warehouses")
-async def create_warehouse(data: WarehouseCreate):
-    try:
-        res = supabase.table("warehouses").insert(data.model_dump(exclude_none=True)).execute()
-        return res.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def create_warehouse(wh: WarehouseCreate):
+    check_db()
+    res = supabase.table("warehouses").insert(wh.dict()).execute()
+    return res.data
 
 @app.put("/warehouses/{wh_id}")
-async def update_warehouse(wh_id: int, data: WarehouseCreate):
-    try:
-        res = supabase.table("warehouses").update(data.model_dump(exclude_none=True)).eq("id", wh_id).execute()
-        return res.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def update_warehouse(wh_id: int, wh: WarehouseCreate):
+    check_db()
+    res = supabase.table("warehouses").update(wh.dict()).eq("id", wh_id).execute()
+    return res.data
 
 @app.delete("/warehouses/{wh_id}")
-async def delete_warehouse(wh_id: int):
-    try:
-        supabase.table("warehouses").delete().eq("id", wh_id).execute()
-        return {"message": "Складът е изтрит успешно"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def delete_warehouse(wh_id: int):
+    check_db()
+    res = supabase.table("warehouses").delete().eq("id", wh_id).execute()
+    return {"message": "Warehouse deleted"}
 
 
-# --- 5. КОЛИ-ДОНОРИ ---
+# === 2. КОЛИ-ДОНОРИ ===
+@app.get("/cars")
+def get_cars():
+    check_db()
+    res = supabase.table("cars").select("*, warehouses(name)").order("id", desc=True).execute()
+    return res.data
 
 @app.get("/cars/summary")
-async def get_cars_summary():
-    try:
-        cars_res = supabase.table("cars").select("*, warehouses(name)").execute()
-        cars = cars_res.data or []
+def get_cars_summary():
+    check_db()
+    cars_res = supabase.table("cars").select("*, warehouses(name)").order("id", desc=True).execute()
+    cars = cars_res.data or []
+
+    parts_res = supabase.table("parts").select("id, car_id, title, status, price, sold_price").execute()
+    parts = parts_res.data or []
+
+    result = []
+    for car in cars:
+        car_parts = [p for p in parts if p.get("car_id") == car["id"]]
+        sold_parts_sum = sum((p.get("sold_price") or 0.0) for p in car_parts if p.get("status") == "Продадено")
+        scrap_price = car.get("scrap_price") or 0.0
         
-        parts_res = supabase.table("parts").select("id, title, sold_price, status, car_id").execute()
-        parts = parts_res.data or []
+        total_sales = sold_parts_sum + scrap_price
+        purchase = car.get("purchase_price") or 0.0
+        net_profit = total_sales - purchase
 
-        for car in cars:
-            car_parts = [p for p in parts if p.get("car_id") == car["id"]]
-            car_sales = sum([p.get("sold_price") or 0 for p in car_parts if p.get("status") == "Продадено"])
-            
-            scrap_val = car.get("scrap_price") or 0
-            total_sales = car_sales + scrap_val
-            net_profit = total_sales - (car.get("purchase_price") or 0)
-            
-            car["total_sales"] = total_sales
-            car["net_profit"] = net_profit
-            car["parts"] = car_parts
-            car["title"] = car.get("title") or f"{car.get('make', '')} {car.get('model', '')}".strip()
+        car_data = dict(car)
+        car_data["parts"] = car_parts
+        car_data["parts_count"] = len(car_parts)
+        car_data["total_sales"] = total_sales
+        car_data["net_profit"] = net_profit
+        car_data["title"] = f"{car.get('make', '')} {car.get('model', '')}".strip()
+        result.append(car_data)
 
-        return cars
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return result
 
 @app.post("/cars")
-async def create_car(data: CarCreate):
-    try:
-        car_dict = data.model_dump(exclude_none=True)
-        car_dict["title"] = f"{data.make} {data.model}".strip()
-        car_dict["status"] = "Наличен"
-        res = supabase.table("cars").insert(car_dict).execute()
-        return res.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def create_car(car: CarCreate):
+    check_db()
+    car_data = car.dict()
+    car_data["status"] = "Наличен"
+    res = supabase.table("cars").insert(car_data).execute()
+    return res.data
 
 @app.put("/cars/{car_id}")
-async def update_car(car_id: int, data: CarUpdate):
-    try:
-        update_dict = data.model_dump(exclude_none=True)
-        if "make" in update_dict or "model" in update_dict:
-            current = supabase.table("cars").select("*").eq("id", car_id).single().execute().data
-            make = update_dict.get("make", current.get("make"))
-            model = update_dict.get("model", current.get("model"))
-            update_dict["title"] = f"{make} {model}".strip()
-            
-        res = supabase.table("cars").update(update_dict).eq("id", car_id).execute()
-        return res.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def update_car(car_id: int, car: CarCreate):
+    check_db()
+    res = supabase.table("cars").update(car.dict()).eq("id", car_id).execute()
+    return res.data
 
 @app.put("/cars/{car_id}/scrap")
-async def scrap_car(car_id: int, data: ScrapCar):
-    try:
-        res = supabase.table("cars").update({
-            "status": "Скрап",
-            "scrap_price": data.scrap_price
-        }).eq("id", car_id).execute()
-        return res.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def scrap_car(car_id: int, scrap: CarScrap):
+    check_db()
+    data = {
+        "status": "Скрап",
+        "scrap_price": scrap.scrap_price
+    }
+    res = supabase.table("cars").update(data).eq("id", car_id).execute()
+    return res.data
 
 @app.delete("/cars/{car_id}")
-async def delete_car(car_id: int):
-    try:
-        supabase.table("cars").delete().eq("id", car_id).execute()
-        return {"message": "Колата е изтрита успешно"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def delete_car(car_id: int):
+    check_db()
+    supabase.table("parts").update({"car_id": None}).eq("car_id", car_id).execute()
+    res = supabase.table("cars").delete().eq("id", car_id).execute()
+    return {"message": "Car deleted"}
 
 
-# --- 6. ЧАСТИ ---
-
+# === 3. АВТОЧАСТИ ===
 @app.get("/parts/search")
-async def search_parts():
-    try:
-        res = supabase.table("parts").select("*, warehouses(name), cars(make, model)").order("created_at", desc=True).execute()
-        return res.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def search_parts(q: Optional[str] = None):
+    check_db()
+    query = supabase.table("parts").select("*, warehouses(name), cars(make, model)").order("id", desc=True)
+    if q:
+        query = query.or_(f"title.ilike.%{q}%,make.ilike.%{q}%,model.ilike.%{q}%,oem_number.ilike.%{q}%")
+    res = query.execute()
+    return res.data
 
 @app.post("/parts")
-async def create_part(data: PartCreate):
-    try:
-        part_dict = data.model_dump(exclude_none=True)
-        part_dict["status"] = "Наличен"
-        res = supabase.table("parts").insert(part_dict).execute()
-        return res.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def create_part(part: PartCreate):
+    check_db()
+    part_data = part.dict()
+    part_data["status"] = "Наличен"
+    res = supabase.table("parts").insert(part_data).execute()
+    return res.data
 
 @app.put("/parts/{part_id}")
-async def update_part(part_id: int, data: PartUpdate):
-    try:
-        res = supabase.table("parts").update(data.model_dump(exclude_none=True)).eq("id", part_id).execute()
-        return res.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def update_part(part_id: int, part: PartCreate):
+    check_db()
+    res = supabase.table("parts").update(part.dict()).eq("id", part_id).execute()
+    return res.data
 
 @app.put("/parts/{part_id}/sell")
-async def sell_part(part_id: int, data: PartSell):
-    try:
-        res = supabase.table("parts").update({
-            "status": "Продадено",
-            "sold_price": data.sold_price
-        }).eq("id", part_id).execute()
-        return res.data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def sell_part(part_id: int, sell: PartSell):
+    check_db()
+    data = {
+        "status": "Продадено",
+        "sold_price": sell.sold_price
+    }
+    res = supabase.table("parts").update(data).eq("id", part_id).execute()
+    return res.data
 
 @app.delete("/parts/{part_id}")
-async def delete_part(part_id: int):
-    try:
-        supabase.table("parts").delete().eq("id", part_id).execute()
-        return {"message": "Частта е изтрита успешно"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def delete_part(part_id: int):
+    check_db()
+    res = supabase.table("parts").delete().eq("id", part_id).execute()
+    return {"message": "Part deleted"}
 
 
-# --- 7. РЕПОРТИ ---
-
-@app.get("/reports/financials")
-async def get_financials():
-    try:
-        cars = supabase.table("cars").select("*").execute().data or []
-        parts = supabase.table("parts").select("*").execute().data or []
-        return {"cars": cars, "parts": parts}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# --- 8. МЕДИЯ & AI ---
-
+# === 4. КАЧВАНЕ НА СНИМКИ (CLOUDINARY) ===
 @app.post("/upload-photos")
 async def upload_photos(files: List[UploadFile] = File(...)):
-    if not CLOUDINARY_URL:
-        raise HTTPException(status_code=500, detail="Променливата CLOUDINARY_URL липсва в Render!")
-    
-    photo_urls = []
-    try:
-        for file in files:
-            contents = await file.read()
-            upload_result = cloudinary.uploader.upload(contents)
-            photo_urls.append(upload_result.get("secure_url"))
-        return {"photo_urls": photo_urls}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Грешка Cloudinary: {str(e)}")
+    if not CLOUDINARY_CLOUD_NAME:
+        raise HTTPException(status_code=500, detail="Cloudinary не е конфигуриран на сървъра.")
 
+    uploaded_urls = []
+    for file in files:
+        try:
+            content = await file.read()
+            res = cloudinary.uploader.upload(content)
+            if "secure_url" in res:
+                uploaded_urls.append(res["secure_url"])
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Грешка при качване в Cloudinary: {str(e)}")
+
+    return {"photo_urls": uploaded_urls}
+
+
+# === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI 2.5 FLASH) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY липсва в Render!")
+        raise HTTPException(status_code=500, detail="Gemini API ключът не е конфигуриран.")
 
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        
+        import requests
+        img_res = requests.get(req.photo_url)
+        if img_res.status_code != 200:
+            raise HTTPException(status_code=400, detail="Снимката не може да бъде изтеглена от Cloudinary.")
+
+        image_data = img_res.content
+        mime_type = img_res.headers.get("Content-Type", "image/jpeg")
+
+        model = genai.GenerativeModel("gemini-2.5-flash")
+
         if req.type == "car":
-            prompt = "Анализирай снимката на колата и върни САМО валиден JSON обект с ключове: make (марка), model (модел), year (година като число или null), engine (двигател или null), fuel_type (гориво - Дизел, Бензин, Газ/Бензин или null). Не слагай нищо друго освен JSON."
+            prompt = """
+            Анализирай това изображение на автомобил и върни САМО валиден JSON обект без markdown обвивки.
+            JSON структура:
+            {
+                "make": "Марка (напр. Audi, BMW)",
+                "model": "Модел (напр. A4, X5)",
+                "year": Година (число или null),
+                "engine": "Двигател (напр. 2.0 TDI)",
+                "fuel_type": "Тип гориво (Дизел, Бензин, Газ/Бензин, Електрически, Хибрид)"
+            }
+            """
         else:
-            prompt = "Анализирай снимката на авточастта и върни САМО валиден JSON обект с ключове: title (име на частта на български), make (марка кола), model (модел кола), year (година като число или null), oem_number (OEM номер или null). Не слагай нищо друго освен JSON."
+            prompt = """
+            Анализирай това изображение на авточаст и върни САМО валиден JSON обект без markdown обвивки.
+            JSON структура:
+            {
+                "title": "Име на частта (напр. Предна броня, Алтернатор)",
+                "make": "Марка автомобил (ако се вижда)",
+                "model": "Модел (ако се вижда)",
+                "year": Година (число или null),
+                "oem_number": "OEM или сериен номер (ако се вижда)"
+            }
+            """
 
-        import urllib.request
-        with urllib.request.urlopen(req.photo_url) as response:
-            image_data = response.read()
+        response = model.generate_content([
+            {"mime_type": mime_type, "data": image_data},
+            prompt
+        ])
 
-        image_part = {"mime_type": "image/jpeg", "data": image_data}
-        response = model.generate_content([prompt, image_part])
-        cleaned_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-        
-        result_data = json.loads(cleaned_text)
-        return {"result": result_data}
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+        parsed_json = json.loads(text)
+        return {"result": parsed_json}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Грешка AI Анализ: {str(e)}")
+
+
+# === 6. ФИНАНСОВИ РЕЗУЛТАТИ ===
+@app.get("/reports/financials")
+def get_financials():
+    check_db()
+    cars = supabase.table("cars").select("purchase_price, scrap_price, status").execute().data or []
+    parts = supabase.table("parts").select("price, sold_price, status").execute().data or []
+    return {"cars": cars, "parts": parts}
