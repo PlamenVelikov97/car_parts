@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Автоморга Мениджър</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="[https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css](https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css)" rel="stylesheet">
     <style>
         body { background-color: #f4f6f9; }
         .nav-tabs .nav-link { font-weight: bold; cursor: pointer; }
@@ -28,8 +28,16 @@
 
     <!-- 1. ТАБ: КОЛИ-ДОНОРИ -->
     <div id="carsTab" class="tab-content">
-        <div class="d-flex justify-content-between mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h3>Коли в моргата</h3>
+            
+            <!-- БЪРЗ ФИЛТЪР ЗА КОЛИ -->
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-secondary active" id="filter-all" onclick="filterCars('all')">Всички</button>
+                <button type="button" class="btn btn-outline-success" id="filter-active" onclick="filterCars('active')">Налични</button>
+                <button type="button" class="btn btn-outline-warning" id="filter-scrap" onclick="filterCars('scrap')">Скрап</button>
+            </div>
+
             <button class="btn btn-primary" onclick="openCarModal()">+ Добави Кола</button>
         </div>
         <div class="row" id="carsContainer"></div>
@@ -242,18 +250,19 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="[https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js](https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js)"></script>
 <script>
     let carPhotos = [];
     let partPhotos = [];
     let globalWarehouses = [];
     let globalCars = [];
+    let currentCarFilter = 'all';
 
     const carModal = new bootstrap.Modal(document.getElementById('carModal'));
     const partModal = new bootstrap.Modal(document.getElementById('partModal'));
     const whModal = new bootstrap.Modal(document.getElementById('warehouseModal'));
 
-    const defaultImg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='180' viewBox='0 0 300 180'%3E%3Crect width='100%25' height='100%25' fill='%23e9ecef'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%236c757d'%3EНяма Снимка%3C/text%3E%3C/svg%3E";
+    const defaultImg = "data:image/svg+xml,%3Csvg xmlns='[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)' width='300' height='180' viewBox='0 0 300 180'%3E%3Crect width='100%25' height='100%25' fill='%23e9ecef'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%236c757d'%3EНяма Снимка%3C/text%3E%3C/svg%3E";
 
     function showTab(tabName) {
         document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
@@ -347,17 +356,42 @@
         await loadWarehouses();
         const res = await fetch('/cars/summary');
         globalCars = await res.json();
+        renderCars();
+        populateCarSelect();
+    }
+
+    function filterCars(status) {
+        currentCarFilter = status;
+        document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
+        document.getElementById(`filter-${status}`).classList.add('active');
+        renderCars();
+    }
+
+    function renderCars() {
         const container = document.getElementById('carsContainer');
         container.innerHTML = '';
 
-        populateCarSelect();
+        let filteredCars = globalCars;
+        if (currentCarFilter === 'active') {
+            filteredCars = globalCars.filter(c => c.status !== 'Скрап');
+        } else if (currentCarFilter === 'scrap') {
+            filteredCars = globalCars.filter(c => c.status === 'Скрап');
+        }
 
-        globalCars.forEach(c => {
+        if (filteredCars.length === 0) {
+            container.innerHTML = '<div class="col-12 text-center text-muted py-4"><h5>Няма намерени коли</h5></div>';
+            return;
+        }
+
+        filteredCars.forEach(c => {
             const photos = c.photo_urls || [];
             const mainImg = (photos && photos.length > 0) ? photos[0] : defaultImg;
-            const statusBadge = c.status === 'Скрап' ? '<span class="badge bg-secondary">Скрап</span>' : '<span class="badge bg-success">Наличен</span>';
+            
+            // СТАТУС В ЖЪЛТО ЗА СКРАП И ЗЕЛЕНО ЗА НАЛИЧЕН
+            const statusBadge = c.status === 'Скрап' 
+                ? '<span class="badge bg-warning text-dark">Скрап</span>' 
+                : '<span class="badge bg-success">Наличен</span>';
 
-            // ИЗВЛИЧАНЕ НА ПРОДАДЕНИТЕ ЧАСТИ ЗА КОЛАТА
             const partsList = c.parts || [];
             const soldParts = partsList.filter(p => p.status === 'Продадено');
 
@@ -409,7 +443,6 @@
                             <p class="card-text mb-2 text-primary">Печалба: <strong>${(c.net_profit || 0).toFixed(2)} лв.</strong></p>
                             ${c.notes ? `<p class="small text-muted mb-2"><i>Бележка: ${c.notes}</i></p>` : ''}
                             
-                            <!-- ПАДНЕЩ СТИЛ БОКС ЗА ПРОДАДЕНИТЕ ЧАСТИ -->
                             <div class="accordion my-2" id="accordion-car-${c.id}">
                                 <div class="accordion-item">
                                     <h2 class="accordion-header">
@@ -425,7 +458,8 @@
                                 </div>
                             </div>
 
-                            <div class="d-flex gap-1 mt-auto pt-2">
+                            <div class="d-flex gap-1 mt-auto pt-2 flex-wrap">
+                                <button class="btn btn-sm btn-outline-info" onclick="runAiCheckOnCar(${c.id})">🤖 AI Чек</button>
                                 <button class="btn btn-sm btn-outline-warning" onclick="editCar(${c.id})">Редактирай</button>
                                 ${c.status !== 'Скрап' ? `<button class="btn btn-sm btn-outline-secondary" onclick="scrapCar(${c.id})">Скрап</button>` : ''}
                                 <button class="btn btn-sm btn-outline-danger ms-auto" onclick="deleteCar(${c.id})">Изтрий</button>
@@ -472,6 +506,18 @@
         renderPhotoPreview('car');
         document.getElementById('carModalTitle').innerText = 'Редактирай Кола';
         carModal.show();
+    }
+
+    async function runAiCheckOnCar(id) {
+        const car = globalCars.find(c => c.id === id);
+        if(!car) return;
+        if(!car.photo_urls || car.photo_urls.length === 0) {
+            alert('Колата няма добавени снимки за AI анализ!');
+            return;
+        }
+
+        editCar(id);
+        await runAiAnalyze(car.photo_urls[0], 'car');
     }
 
     document.getElementById('carForm').addEventListener('submit', async (e) => {
@@ -547,7 +593,8 @@
                             <p class="card-text mb-1">Цена: <strong>${p.price} лв.</strong></p>
                             <p class="card-text mb-2">Статус: <span class="badge ${isSold ? 'bg-danger' : 'bg-primary'}">${p.status}</span> ${isSold ? `(Продадена за ${p.sold_price} лв.)` : ''}</p>
                             ${p.notes ? `<p class="small text-muted mb-2"><i>Бележка: ${p.notes}</i></p>` : ''}
-                            <div class="d-flex gap-1 mt-2">
+                            <div class="d-flex gap-1 mt-2 flex-wrap">
+                                <button class="btn btn-sm btn-outline-info" onclick="runAiCheckOnPart(${p.id})">🤖 AI Чек</button>
                                 ${!isSold ? `<button class="btn btn-sm btn-success" onclick="sellPart(${p.id})">Продай</button>` : ''}
                                 <button class="btn btn-sm btn-outline-warning" onclick="editPart(${p.id})">Редактирай</button>
                                 <button class="btn btn-sm btn-outline-danger ms-auto" onclick="deletePart(${p.id})">Изтрий</button>
@@ -591,6 +638,20 @@
 
         document.getElementById('partModalTitle').innerText = 'Редактирай Част';
         partModal.show();
+    }
+
+    async function runAiCheckOnPart(id) {
+        const res = await fetch('/parts/search');
+        const parts = await res.json();
+        const part = parts.find(p => p.id === id);
+        if(!part) return;
+        if(!part.photo_urls || part.photo_urls.length === 0) {
+            alert('Частта няма добавени снимки за AI анализ!');
+            return;
+        }
+
+        await editPart(id);
+        await runAiAnalyze(part.photo_urls[0], 'part');
     }
 
     document.getElementById('partForm').addEventListener('submit', async (e) => {
