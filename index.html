@@ -126,10 +126,22 @@
                             </div>
                             <div class="row g-2 mb-2">
                                 <div class="col"><input type="number" id="carYear" class="form-control" placeholder="Година"></div>
-                                <div class="col"><input type="text" id="carEngine" class="form-control" placeholder="Двигател"></div>
+                                <div class="col"><input type="text" id="carEngine" class="form-control" placeholder="Двигател (напр. 2.0 TDI)"></div>
                             </div>
                             <div class="mb-2">
-                                <input type="number" id="carPurchasePrice" step="0.01" class="form-control" placeholder="Покупна цена (лв.)" required>
+                                <label class="form-label">Тип гориво</label>
+                                <select id="carFuelType" class="form-select">
+                                    <option value="">-- Избери гориво --</option>
+                                    <option value="Дизел">Дизел</option>
+                                    <option value="Бензин">Бензин</option>
+                                    <option value="Газ/Бензин">Газ/Бензин</option>
+                                    <option value="Електрически">Електрически</option>
+                                    <option value="Хибрид">Хибрид</option>
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Покупна цена (лв.)</label>
+                                <input type="number" id="carPurchasePrice" step="0.01" class="form-control" placeholder="Покупна цена" required>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Локация / Склад</label>
@@ -199,6 +211,13 @@
         loadWarehouses();
         loadCars();
         loadParts();
+
+        // Автоматично обновява складовете при смяна на таб
+        document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tab => {
+            tab.addEventListener('shown.bs.tab', () => {
+                loadWarehouses();
+            });
+        });
     });
 
     // --- 1. AI СКАНИРАНЕ & КАЧВАНЕ НА СНИМКИ ---
@@ -240,6 +259,7 @@
                 if (aiData.model) document.getElementById('carModel').value = aiData.model;
                 if (aiData.year) document.getElementById('carYear').value = aiData.year;
                 if (aiData.engine) document.getElementById('carEngine').value = aiData.engine;
+                if (aiData.fuel_type) document.getElementById('carFuelType').value = aiData.fuel_type;
             } else {
                 if (aiData.title) document.getElementById('partTitle').value = aiData.title;
                 if (aiData.make) document.getElementById('partMake').value = aiData.make;
@@ -257,25 +277,33 @@
 
     // --- 2. СКЛАДОВЕ ---
     async function loadWarehouses() {
-        const res = await fetch(`${API_URL}/warehouses`);
-        const data = await res.json();
-        
-        const list = document.getElementById('warehousesList');
-        const selectPart = document.getElementById('partWarehouse');
-        const selectCar = document.getElementById('carWarehouse');
+        try {
+            const res = await fetch(`${API_URL}/warehouses`);
+            const data = await res.json();
+            
+            const list = document.getElementById('warehousesList');
+            const selectPart = document.getElementById('partWarehouse');
+            const selectCar = document.getElementById('carWarehouse');
 
-        list.innerHTML = '';
-        selectPart.innerHTML = '<option value="">-- Избери склад --</option>';
-        selectCar.innerHTML = '<option value="">-- Избери склад --</option>';
+            if (list) list.innerHTML = '';
+            if (selectPart) selectPart.innerHTML = '<option value="">-- Избери склад --</option>';
+            if (selectCar) selectCar.innerHTML = '<option value="">-- Избери склад --</option>';
 
-        data.forEach(w => {
-            list.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center">
-                ${w.name} <small class="text-muted">${w.address || ''}</small>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteWarehouse(${w.id})"><i class="bi bi-trash"></i></button>
-            </li>`;
-            selectPart.innerHTML += `<option value="${w.id}">${w.name}</option>`;
-            selectCar.innerHTML += `<option value="${w.id}">${w.name}</option>`;
-        });
+            if (Array.isArray(data)) {
+                data.forEach(w => {
+                    if (list) {
+                        list.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center">
+                            ${w.name} <small class="text-muted">${w.address || ''}</small>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteWarehouse(${w.id})"><i class="bi bi-trash"></i></button>
+                        </li>`;
+                    }
+                    if (selectPart) selectPart.innerHTML += `<option value="${w.id}">${w.name}</option>`;
+                    if (selectCar) selectCar.innerHTML += `<option value="${w.id}">${w.name}</option>`;
+                });
+            }
+        } catch (err) {
+            console.error("Грешка при зареждане на складовете:", err);
+        }
     }
 
     document.getElementById('warehouseForm').onsubmit = async (e) => {
@@ -307,31 +335,39 @@
         tbody.innerHTML = '';
         partCarSelect.innerHTML = '<option value="">-- Без кола-донор --</option>';
 
-        data.forEach(c => {
-            const profitClass = c.net_profit >= 0 ? 'text-success' : 'text-danger';
-            tbody.innerHTML += `<tr>
-                <td><strong>${c.title}</strong></td>
-                <td>${c.warehouses ? c.warehouses.name : '-'}</td>
-                <td>${c.purchase_price} лв.</td>
-                <td>${c.total_sales} лв.</td>
-                <td class="${profitClass} fw-bold">${c.net_profit} лв.</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteCar(${c.id})"><i class="bi bi-trash"></i></button>
-                </td>
-            </tr>`;
+        if (Array.isArray(data)) {
+            data.forEach(c => {
+                const profitClass = c.net_profit >= 0 ? 'text-success' : 'text-danger';
+                tbody.innerHTML += `<tr>
+                    <td>
+                        <strong>${c.title}</strong><br>
+                        <small class="text-muted">${c.fuel_type || ''} ${c.engine ? '| ' + c.engine : ''}</small>
+                    </td>
+                    <td>${c.warehouses ? c.warehouses.name : '-'}</td>
+                    <td>${c.purchase_price} лв.</td>
+                    <td>${c.total_sales} лв.</td>
+                    <td class="${profitClass} fw-bold">${c.net_profit} лв.</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteCar(${c.id})"><i class="bi bi-trash"></i></button>
+                    </td>
+                </tr>`;
 
-            partCarSelect.innerHTML += `<option value="${c.id}">${c.title}</option>`;
-        });
+                partCarSelect.innerHTML += `<option value="${c.id}">${c.title}</option>`;
+            });
+        }
     }
 
     document.getElementById('carForm').onsubmit = async (e) => {
         e.preventDefault();
         const whInput = document.getElementById('carWarehouse').value;
+        const fuelInput = document.getElementById('carFuelType').value;
+
         const body = {
             make: document.getElementById('carMake').value,
             model: document.getElementById('carModel').value,
             year: parseInt(document.getElementById('carYear').value) || null,
             engine: document.getElementById('carEngine').value || null,
+            fuel_type: fuelInput || null,
             purchase_price: parseFloat(document.getElementById('carPurchasePrice').value) || 0,
             warehouse_id: whInput ? parseInt(whInput) : null
         };
@@ -372,25 +408,27 @@
         const tbody = document.querySelector('#partsTable tbody');
         tbody.innerHTML = '';
 
-        parts.forEach(p => {
-            const photo = (p.photo_urls && p.photo_urls.length > 0) ? p.photo_urls[0] : (p.photo_url || 'https://placehold.co/80x80?text=No+Image');
-            const statusBadge = p.status === 'Продадено' ? 'bg-danger' : 'bg-success';
+        if (Array.isArray(parts)) {
+            parts.forEach(p => {
+                const photo = (p.photo_urls && p.photo_urls.length > 0) ? p.photo_urls[0] : (p.photo_url || 'https://placehold.co/80x80?text=No+Image');
+                const statusBadge = p.status === 'Продадено' ? 'bg-danger' : 'bg-success';
 
-            tbody.innerHTML += `<tr>
-                <td><img src="${photo}" class="img-preview"></td>
-                <td>
-                    <strong>${p.title}</strong><br>
-                    <small class="text-muted">${p.make || ''} ${p.model || ''} (${p.year || ''}) | OEM: ${p.oem_number || '-'}</small>
-                </td>
-                <td>${p.warehouses ? p.warehouses.name : '-'}</td>
-                <td class="fw-bold">${p.sold_price || p.price} лв.</td>
-                <td><span class="badge ${statusBadge}">${p.status}</span></td>
-                <td>
-                    ${p.status !== 'Продадено' ? `<button class="btn btn-sm btn-outline-success me-1" onclick="sellPart(${p.id})">Продай</button>` : ''}
-                    <button class="btn btn-sm btn-outline-danger" onclick="deletePart(${p.id})"><i class="bi bi-trash"></i></button>
-                </td>
-            </tr>`;
-        });
+                tbody.innerHTML += `<tr>
+                    <td><img src="${photo}" class="img-preview"></td>
+                    <td>
+                        <strong>${p.title}</strong><br>
+                        <small class="text-muted">${p.make || ''} ${p.model || ''} (${p.year || ''}) | OEM: ${p.oem_number || '-'}</small>
+                    </td>
+                    <td>${p.warehouses ? p.warehouses.name : '-'}</td>
+                    <td class="fw-bold">${p.sold_price || p.price} лв.</td>
+                    <td><span class="badge ${statusBadge}">${p.status}</span></td>
+                    <td>
+                        ${p.status !== 'Продадено' ? `<button class="btn btn-sm btn-outline-success me-1" onclick="sellPart(${p.id})">Продай</button>` : ''}
+                        <button class="btn btn-sm btn-outline-danger" onclick="deletePart(${p.id})"><i class="bi bi-trash"></i></button>
+                    </td>
+                </tr>`;
+            });
+        }
     }
 
     function filterParts() {
