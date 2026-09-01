@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from supabase import create_client, Client
@@ -8,28 +9,35 @@ import cloudinary.uploader
 import os
 import json
 
-
 app = FastAPI()
 
 # --- 1. КОНФИГУРАЦИЯ НА ВЪНШНИ УСЛУГИ ---
 
-# Supabase
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
-# Gemini AI
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# Cloudinary (За качване на снимки)
 CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "")
 if CLOUDINARY_URL:
     cloudinary.config(cloudinary_url=CLOUDINARY_URL)
 
 
-# --- 2. PUDANTIC МОДЕЛИ (ДАННИ ОТ HTML) ---
+# --- 2. СЕРВИРАНЕ НА НАЧАЛНАТА СТРАНИЦА (INDEX.HTML) ---
+
+@app.get("/", response_class=HTMLResponse)
+async def read_index():
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return "<h1>Грешка: Файлът index.html не е намерен в главната директория.</h1>"
+
+
+# --- 3. PUDANTIC МОДЕЛИ ---
 
 class WarehouseCreate(BaseModel):
     name: str
@@ -89,10 +97,10 @@ class ScrapCar(BaseModel):
 
 class AiAnalyzeRequest(BaseModel):
     image_url: str
-    type: str  # 'car' или 'part'
+    type: str
 
 
-# --- 3. СКЛАДОВЕ (WAREHOUSES) ---
+# --- 4. СКЛАДОВЕ ---
 
 @app.get("/warehouses")
 async def get_warehouses():
@@ -127,7 +135,7 @@ async def delete_warehouse(wh_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- 4. КОЛИ-ДОНОРИ (CARS) ---
+# --- 5. КОЛИ-ДОНОРИ ---
 
 @app.get("/cars/summary")
 async def get_cars_summary():
@@ -170,7 +178,6 @@ async def create_car(data: CarCreate):
 async def update_car(car_id: int, data: CarUpdate):
     try:
         update_dict = data.model_dump(exclude_none=True)
-        
         if "make" in update_dict or "model" in update_dict:
             current = supabase.table("cars").select("*").eq("id", car_id).single().execute().data
             make = update_dict.get("make", current.get("make"))
@@ -202,7 +209,7 @@ async def delete_car(car_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- 5. ЧАСТИ (PARTS) ---
+# --- 6. ЧАСТИ ---
 
 @app.get("/parts/search")
 async def search_parts():
@@ -250,7 +257,7 @@ async def delete_part(part_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- 6. ФИНАНСОВИ РЕЗУЛТАТИ (REPORTS) ---
+# --- 7. РЕПОРТИ ---
 
 @app.get("/reports/financials")
 async def get_financials():
@@ -262,7 +269,7 @@ async def get_financials():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- 7. МЕДИЯ & AI (CLOUDINARY & GEMINI) ---
+# --- 8. МЕДИЯ & AI ---
 
 @app.post("/upload-photos")
 async def upload_photos(files: List[UploadFile] = File(...)):
@@ -283,43 +290,16 @@ async def ai_analyze(req: AiAnalyzeRequest):
 
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        
-        if req.type == 'car':
-            prompt = """
-            Анализирай тази снимка на автомобил и върни JSON обект със следните ключове:
-            - make (марка)
-            - model (модел)
-            - year (година като число или null)
-            - engine (обем/двигател като текст или null)
-            - fuel_type (само едно от следните: "Дизел", "Бензин", "Газ/Бензин", "Електрически", "Хибрид" или null)
-            Върни САМО чист JSON без допълнителен текст или markdown.
-            """
-        else:
-            prompt = """
-            Анализирай тази снимка на авточаст и върни JSON обект със следните ключове:
-            - title (название на частта на български)
-            - make (марка автомобил ако е видимо)
-            - model (модел автомобил ако е видимо)
-            - year (година ако е видимо)
-            - oem_number (OEM/сериен номер ако е видим на снимката)
-            Върни САМО чист JSON без допълнителен текст или markdown.
-            """
+        prompt = "Анализирай тази снимка и върни JSON обект."
 
         import urllib.request
         with urllib.request.urlopen(req.image_url) as response:
             image_data = response.read()
 
-        image_part = {
-            "mime_type": "image/jpeg",
-            "data": image_data
-        }
-
+        image_part = {"mime_type": "image/jpeg", "data": image_data}
         response = model.generate_content([prompt, image_part])
         cleaned_text = response.text.strip().replace("```json", "").replace("```", "")
-        parsed_json = json.loads(cleaned_text)
-        
-        return parsed_json
+        return json.loads(cleaned_text)
 
     except Exception as e:
-        print("AI Грешка:", str(e))
         return {}
