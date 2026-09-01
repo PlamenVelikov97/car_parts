@@ -6,9 +6,11 @@
     <title>Автоморга Мениджър</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; }
+        body { background-color: #f4f6f9; }
         .nav-tabs .nav-link { font-weight: bold; cursor: pointer; }
+        .card-img-top { height: 180px; object-fit: cover; background-color: #e9ecef; }
         .badge-scrap { background-color: #6c757d; }
+        .preview-img { width: 70px; height: 70px; object-fit: cover; border-radius: 5px; margin-right: 5px; }
     </style>
 </head>
 <body>
@@ -18,18 +20,10 @@
 
     <!-- НАВИГАЦИЯ -->
     <ul class="nav nav-tabs mb-4">
-        <li class="nav-item">
-            <a class="nav-link active" id="tab-cars" onclick="showTab('cars')">🚘 Коли-Донори</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" id="tab-parts" onclick="showTab('parts')">🔧 Авточасти</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" id="tab-warehouses" onclick="showTab('warehouses')">🏢 Складове</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" id="tab-financials" onclick="showTab('financials')">📊 Резултати</a>
-        </li>
+        <li class="nav-item"><a class="nav-link active" id="tab-cars" onclick="showTab('cars')">🚘 Коли-Донори</a></li>
+        <li class="nav-item"><a class="nav-link" id="tab-parts" onclick="showTab('parts')">🔧 Авточасти</a></li>
+        <li class="nav-item"><a class="nav-link" id="tab-warehouses" onclick="showTab('warehouses')">🏢 Складове</a></li>
+        <li class="nav-item"><a class="nav-link" id="tab-financials" onclick="showTab('financials')">📊 Резултати</a></li>
     </ul>
 
     <!-- 1. ТАБ: КОЛИ-ДОНОРИ -->
@@ -54,15 +48,11 @@
     <div id="warehousesTab" class="tab-content" style="display:none;">
         <div class="d-flex justify-content-between mb-3">
             <h3>Управление на Складове</h3>
-            <button class="btn btn-warning" onclick="openWarehouseModal()">+ Добави Склад</button>
+            <button class="btn btn-warning text-white" onclick="openWarehouseModal()">+ Добави Склад</button>
         </div>
         <table class="table table-striped table-hover bg-white rounded shadow-sm">
             <thead class="table-dark">
-                <tr>
-                    <th>Име на Склад</th>
-                    <th>Адрес</th>
-                    <th>Действия</th>
-                </tr>
+                <tr><th>Име на Склад</th><th>Адрес</th><th>Действия</th></tr>
             </thead>
             <tbody id="warehousesTableBody"></tbody>
         </table>
@@ -73,28 +63,152 @@
         <h3>Финансови Резултати</h3>
         <div class="row mt-3">
             <div class="col-md-4">
-                <div class="card text-white bg-danger mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Общо Разходи</h5>
-                        <h2 id="totalExpenses">0.00 лв.</h2>
-                    </div>
+                <div class="card text-white bg-danger mb-3 shadow">
+                    <div class="card-body"><h5>Общо Разходи</h5><h2 id="totalExpenses">0.00 лв.</h2></div>
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="card text-white bg-primary mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Общо Приходи</h5>
-                        <h2 id="totalRevenues">0.00 лв.</h2>
-                    </div>
+                <div class="card text-white bg-primary mb-3 shadow">
+                    <div class="card-body"><h5>Общо Приходи</h5><h2 id="totalRevenues">0.00 лв.</h2></div>
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="card text-white bg-success mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Чиста Печалба</h5>
-                        <h2 id="netProfit">0.00 лв.</h2>
-                    </div>
+                <div class="card text-white bg-success mb-3 shadow">
+                    <div class="card-body"><h5>Чиста Печалба</h5><h2 id="netProfit">0.00 лв.</h2></div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- МОДАЛ ЗА КОЛА -->
+<div class="modal fade" id="carModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="carModalTitle">Добави Кола</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="carForm">
+                    <input type="hidden" id="car_id">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Марка</label>
+                            <input type="text" id="car_make" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Модел</label>
+                            <input type="text" id="car_model" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Година</label>
+                            <input type="number" id="car_year" class="form-control">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Двигател</label>
+                            <input type="text" id="car_engine" class="form-control" placeholder="напр. 2.0 TDI">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Тип гориво</label>
+                            <select id="car_fuel" class="form-select">
+                                <option value="">Избери...</option>
+                                <option value="Дизел">Дизел</option>
+                                <option value="Бензин">Бензин</option>
+                                <option value="Газ/Бензин">Газ/Бензин</option>
+                                <option value="Електрически">Електрически</option>
+                                <option value="Хибрид">Хибрид</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Покупна цена (лв.)</label>
+                            <input type="number" step="0.01" id="car_price" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Склад</label>
+                            <select id="car_warehouse" class="form-select"></select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Снимки</label>
+                        <input type="file" id="car_photos_file" class="form-control mb-2" multiple accept="image/*" onchange="uploadPhotos('car')">
+                        <div id="car_photos_preview" class="d-flex flex-wrap"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Бележки</label>
+                        <textarea id="car_notes" class="form-control" rows="2"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Запази Колата</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- МОДАЛ ЗА ЧАСТ -->
+<div class="modal fade" id="partModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="partModalTitle">Добави Авточаст</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="partForm">
+                    <input type="hidden" id="part_id">
+                    <div class="mb-3">
+                        <label class="form-label">Наименование на частта</label>
+                        <input type="text" id="part_title" class="form-control" required placeholder="напр. Задна броня">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Марка</label>
+                            <input type="text" id="part_make" class="form-control">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Модел</label>
+                            <input type="text" id="part_model" class="form-control">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Година</label>
+                            <input type="number" id="part_year" class="form-control">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">OEM / Сериен Номер</label>
+                            <input type="text" id="part_oem" class="form-control">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Искана цена (лв.)</label>
+                            <input type="number" step="0.01" id="part_price" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Към Кола-Донор</label>
+                            <select id="part_car" class="form-select"></select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Склад</label>
+                            <select id="part_warehouse" class="form-select"></select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Снимки</label>
+                        <input type="file" id="part_photos_file" class="form-control mb-2" multiple accept="image/*" onchange="uploadPhotos('part')">
+                        <div id="part_photos_preview" class="d-flex flex-wrap"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Бележки</label>
+                        <textarea id="part_notes" class="form-control" rows="2"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">Запази Частта</button>
+                </form>
             </div>
         </div>
     </div>
@@ -119,7 +233,7 @@
                         <label class="form-label">Адрес / Описание</label>
                         <input type="text" id="wh_address" class="form-control" placeholder="напр. Сектор 3, Рафт B">
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Запази</button>
+                    <button type="submit" class="btn btn-warning text-white w-100">Запази</button>
                 </form>
             </div>
         </div>
@@ -128,6 +242,15 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    let carPhotos = [];
+    let partPhotos = [];
+    let globalWarehouses = [];
+    let globalCars = [];
+
+    const carModal = new bootstrap.Modal(document.getElementById('carModal'));
+    const partModal = new bootstrap.Modal(document.getElementById('partModal'));
+    const whModal = new bootstrap.Modal(document.getElementById('warehouseModal'));
+
     function showTab(tabName) {
         document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
         document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
@@ -141,17 +264,18 @@
         if(tabName === 'parts') loadParts();
     }
 
+    // --- 1. СКЛАДОВЕ ---
     async function loadWarehouses() {
         const res = await fetch('/warehouses');
-        const warehouses = await res.json();
+        globalWarehouses = await res.json();
         const tbody = document.getElementById('warehousesTableBody');
         tbody.innerHTML = '';
 
-        warehouses.forEach(wh => {
+        globalWarehouses.forEach(wh => {
             tbody.innerHTML += `
                 <tr>
                     <td><strong>${wh.name}</strong></td>
-                    <td>${wh.address || 'Няма посочен адрес'}</td>
+                    <td>${wh.address || '-'}</td>
                     <td>
                         <button class="btn btn-sm btn-outline-warning" onclick="editWarehouse(${wh.id}, '${wh.name}', '${wh.address || ''}')">Редактирай</button>
                         <button class="btn btn-sm btn-outline-danger" onclick="deleteWarehouse(${wh.id})">Изтрий</button>
@@ -159,9 +283,18 @@
                 </tr>
             `;
         });
+        populateWarehouseSelects();
     }
 
-    const whModal = new bootstrap.Modal(document.getElementById('warehouseModal'));
+    function populateWarehouseSelects() {
+        ['car_warehouse', 'part_warehouse'].forEach(id => {
+            const select = document.getElementById(id);
+            select.innerHTML = '<option value="">Няма избран склад</option>';
+            globalWarehouses.forEach(wh => {
+                select.innerHTML += `<option value="${wh.id}">${wh.name}</option>`;
+            });
+        });
+    }
 
     function openWarehouseModal() {
         document.getElementById('wh_id').value = '';
@@ -199,28 +332,46 @@
     });
 
     async function deleteWarehouse(id) {
-        if(confirm('Сигурни ли сте, че искате да изтриете този склад?')) {
+        if(confirm('Сигурни ли сте?')) {
             await fetch(`/warehouses/${id}`, { method: 'DELETE' });
             loadWarehouses();
         }
     }
 
+    // --- 2. КОЛИ-ДОНОРИ ---
     async function loadCars() {
+        await loadWarehouses();
         const res = await fetch('/cars/summary');
-        const cars = await res.json();
+        globalCars = await res.json();
         const container = document.getElementById('carsContainer');
         container.innerHTML = '';
 
-        cars.forEach(c => {
+        populateCarSelect();
+
+        globalCars.forEach(c => {
+            const photos = c.photo_urls || [];
+            const mainImg = photos.length > 0 ? photos[0] : 'https://via.placeholder.com/300x180?text=Няма+Снимка';
+            const statusBadge = c.status === 'Скрап' ? '<span class="badge bg-secondary">Скрап</span>' : '<span class="badge bg-success">Наличен</span>';
+
             container.innerHTML += `
-                <div class="col-md-4 mb-3">
-                    <div class="card shadow-sm">
+                <div class="col-md-4 mb-4">
+                    <div class="card shadow-sm h-100">
+                        <img src="${mainImg}" class="card-img-top" alt="${c.title}">
                         <div class="card-body">
-                            <h5 class="card-title">${c.title}</h5>
-                            <p class="card-text">
-                                Покупна цена: <strong>${c.purchase_price} лв.</strong><br>
-                                Статус: <span class="badge ${c.status === 'Скрап' ? 'bg-secondary' : 'bg-success'}">${c.status}</span>
-                            </p>
+                            <h5 class="card-title">${c.title} ${statusBadge}</h5>
+                            <p class="card-text mb-1">Година: <strong>${c.year || '-'}</strong> | Двигател: <strong>${c.engine || '-'}</strong></p>
+                            <p class="card-text mb-1">Гориво: <strong>${c.fuel_type || '-'}</strong></p>
+                            <p class="card-text mb-1">Склад: <strong>${c.warehouses ? c.warehouses.name : '-'}</strong></p>
+                            <hr>
+                            <p class="card-text mb-1">Покупка: <strong>${c.purchase_price} лв.</strong></p>
+                            <p class="card-text mb-1 text-success">Общо Приходи: <strong>${(c.total_sales || 0).toFixed(2)} лв.</strong></p>
+                            <p class="card-text mb-2 text-primary">Печалба: <strong>${(c.net_profit || 0).toFixed(2)} лв.</strong></p>
+                            ${c.notes ? `<p class="small text-muted mb-2"><i>Бележка: ${c.notes}</i></p>` : ''}
+                            <div class="d-flex gap-1 mt-2">
+                                <button class="btn btn-sm btn-outline-warning" onclick="editCar(${c.id})">Редактирай</button>
+                                ${c.status !== 'Скрап' ? `<button class="btn btn-sm btn-outline-secondary" onclick="scrapCar(${c.id})">Скрап</button>` : ''}
+                                <button class="btn btn-sm btn-outline-danger ms-auto" onclick="deleteCar(${c.id})">Изтрий</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -228,22 +379,119 @@
         });
     }
 
+    function populateCarSelect() {
+        const select = document.getElementById('part_car');
+        select.innerHTML = '<option value="">Без обвързване с кола</option>';
+        globalCars.forEach(c => {
+            select.innerHTML += `<option value="${c.id}">${c.title}</option>`;
+        });
+    }
+
+    function openCarModal() {
+        document.getElementById('car_id').value = '';
+        document.getElementById('carForm').reset();
+        carPhotos = [];
+        renderPhotoPreview('car');
+        document.getElementById('carModalTitle').innerText = 'Добави Кола';
+        carModal.show();
+    }
+
+    function editCar(id) {
+        const car = globalCars.find(c => c.id === id);
+        if(!car) return;
+        document.getElementById('car_id').value = car.id;
+        document.getElementById('car_make').value = car.make || '';
+        document.getElementById('car_model').value = car.model || '';
+        document.getElementById('car_year').value = car.year || '';
+        document.getElementById('car_engine').value = car.engine || '';
+        document.getElementById('car_fuel').value = car.fuel_type || '';
+        document.getElementById('car_price').value = car.purchase_price || '';
+        document.getElementById('car_warehouse').value = car.warehouse_id || '';
+        document.getElementById('car_notes').value = car.notes || '';
+        carPhotos = car.photo_urls || [];
+        renderPhotoPreview('car');
+        document.getElementById('carModalTitle').innerText = 'Редактирай Кола';
+        carModal.show();
+    }
+
+    document.getElementById('carForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('car_id').value;
+        const body = {
+            make: document.getElementById('car_make').value,
+            model: document.getElementById('car_model').value,
+            year: parseInt(document.getElementById('car_year').value) || null,
+            engine: document.getElementById('car_engine').value || null,
+            fuel_type: document.getElementById('car_fuel').value || null,
+            purchase_price: parseFloat(document.getElementById('car_price').value),
+            warehouse_id: parseInt(document.getElementById('car_warehouse').value) || null,
+            notes: document.getElementById('car_notes').value || null,
+            photo_urls: carPhotos
+        };
+
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/cars/${id}` : `/cars`;
+
+        await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+
+        carModal.hide();
+        loadCars();
+    });
+
+    async function scrapCar(id) {
+        const price = prompt('За каква сума предавате купето на скрап (лв.)?');
+        if(price !== null && !isNaN(price)) {
+            await fetch(`/cars/${id}/scrap`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scrap_price: parseFloat(price) })
+            });
+            loadCars();
+        }
+    }
+
+    async function deleteCar(id) {
+        if(confirm('Сигурни ли сте, че искате да изтриете тази кола?')) {
+            await fetch(`/cars/${id}`, { method: 'DELETE' });
+            loadCars();
+        }
+    }
+
+    // --- 3. АВТОЧАСТИ ---
     async function loadParts() {
+        await loadCars();
         const res = await fetch('/parts/search');
         const parts = await res.json();
         const container = document.getElementById('partsContainer');
         container.innerHTML = '';
 
         parts.forEach(p => {
+            const photos = p.photo_urls || [];
+            const mainImg = photos.length > 0 ? photos[0] : 'https://via.placeholder.com/300x180?text=Няма+Снимка';
+            const isSold = p.status === 'Продадено';
+
             container.innerHTML += `
-                <div class="col-md-4 mb-3">
-                    <div class="card shadow-sm">
+                <div class="col-md-4 mb-4">
+                    <div class="card shadow-sm h-100">
+                        <img src="${mainImg}" class="card-img-top" alt="${p.title}">
                         <div class="card-body">
                             <h5 class="card-title">${p.title}</h5>
-                            <p class="card-text">
-                                Цена: <strong>${p.price} лв.</strong><br>
-                                Статус: <span class="badge ${p.status === 'Продадено' ? 'bg-danger' : 'bg-primary'}">${p.status}</span>
-                            </p>
+                            <p class="card-text mb-1">За: <strong>${p.make || ''} ${p.model || ''}</strong> (${p.year || '-'})</p>
+                            <p class="card-text mb-1">OEM: <strong>${p.oem_number || '-'}</strong></p>
+                            <p class="card-text mb-1">Склад: <strong>${p.warehouses ? p.warehouses.name : '-'}</strong></p>
+                            <hr>
+                            <p class="card-text mb-1">Цена: <strong>${p.price} лв.</strong></p>
+                            <p class="card-text mb-2">Статус: <span class="badge ${isSold ? 'bg-danger' : 'bg-primary'}">${p.status}</span> ${isSold ? `(Продадена за ${p.sold_price} лв.)` : ''}</p>
+                            ${p.notes ? `<p class="small text-muted mb-2"><i>Бележка: ${p.notes}</i></p>` : ''}
+                            <div class="d-flex gap-1 mt-2">
+                                ${!isSold ? `<button class="btn btn-sm btn-success" onclick="sellPart(${p.id})">Продай</button>` : ''}
+                                <button class="btn btn-sm btn-outline-warning" onclick="editPart(${p.id})">Редактирай</button>
+                                <button class="btn btn-sm btn-outline-danger ms-auto" onclick="deletePart(${p.id})">Изтрий</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -251,6 +499,160 @@
         });
     }
 
+    function openPartModal() {
+        document.getElementById('part_id').value = '';
+        document.getElementById('partForm').reset();
+        partPhotos = [];
+        renderPhotoPreview('part');
+        document.getElementById('partModalTitle').innerText = 'Добави Авточаст';
+        partModal.show();
+    }
+
+    async function editPart(id) {
+        const res = await fetch('/parts/search');
+        const parts = await res.json();
+        const part = parts.find(p => p.id === id);
+        if(!part) return;
+
+        document.getElementById('part_id').value = part.id;
+        document.getElementById('part_title').value = part.title || '';
+        document.getElementById('part_make').value = part.make || '';
+        document.getElementById('part_model').value = part.model || '';
+        document.getElementById('part_year').value = part.year || '';
+        document.getElementById('part_oem').value = part.oem_number || '';
+        document.getElementById('part_price').value = part.price || '';
+        document.getElementById('part_car').value = part.car_id || '';
+        document.getElementById('part_warehouse').value = part.warehouse_id || '';
+        document.getElementById('part_notes').value = part.notes || '';
+        partPhotos = part.photo_urls || [];
+        renderPhotoPreview('part');
+
+        document.getElementById('partModalTitle').innerText = 'Редактирай Част';
+        partModal.show();
+    }
+
+    document.getElementById('partForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('part_id').value;
+        const body = {
+            title: document.getElementById('part_title').value,
+            make: document.getElementById('part_make').value || null,
+            model: document.getElementById('part_model').value || null,
+            year: parseInt(document.getElementById('part_year').value) || null,
+            oem_number: document.getElementById('part_oem').value || null,
+            price: parseFloat(document.getElementById('part_price').value),
+            car_id: parseInt(document.getElementById('part_car').value) || null,
+            warehouse_id: parseInt(document.getElementById('part_warehouse').value) || null,
+            notes: document.getElementById('part_notes').value || null,
+            photo_urls: partPhotos
+        };
+
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/parts/${id}` : `/parts`;
+
+        await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+
+        partModal.hide();
+        loadParts();
+    });
+
+    async function sellPart(id) {
+        const price = prompt('Въведете крайна цена на продажбата (лв.):');
+        if(price !== null && !isNaN(price)) {
+            await fetch(`/parts/${id}/sell`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sold_price: parseFloat(price) })
+            });
+            loadParts();
+        }
+    }
+
+    async function deletePart(id) {
+        if(confirm('Сигурни ли сте, че искате да изтриете тази част?')) {
+            await fetch(`/parts/${id}`, { method: 'DELETE' });
+            loadParts();
+        }
+    }
+
+    // --- 4. КАЧВАНЕ НА СНИМКИ & AI ---
+    async function uploadPhotos(type) {
+        const fileInput = document.getElementById(`${type}_photos_file`);
+        const files = fileInput.files;
+        if(files.length === 0) return;
+
+        const formData = new FormData();
+        for(let i = 0; i < files.length; i++) {
+            formData.append('files', files[i]);
+        }
+
+        const res = await fetch('/upload-photos', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if(data.photo_urls) {
+            if(type === 'car') carPhotos.push(...data.photo_urls);
+            else partPhotos.push(...data.photo_urls);
+            renderPhotoPreview(type);
+
+            // Пускаме AI Анализ за първата качена снимка
+            if(data.photo_urls.length > 0) {
+                runAiAnalyze(data.photo_urls[0], type);
+            }
+        }
+    }
+
+    function renderPhotoPreview(type) {
+        const list = type === 'car' ? carPhotos : partPhotos;
+        const container = document.getElementById(`${type}_photos_preview`);
+        container.innerHTML = '';
+        list.forEach((url, idx) => {
+            container.innerHTML += `
+                <div class="position-relative me-2 mb-2">
+                    <img src="${url}" class="preview-img">
+                    <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 p-0 px-1" onclick="removePhoto('${type}', ${idx})">&times;</button>
+                </div>
+            `;
+        });
+    }
+
+    function removePhoto(type, idx) {
+        if(type === 'car') carPhotos.splice(idx, 1);
+        else partPhotos.splice(idx, 1);
+        renderPhotoPreview(type);
+    }
+
+    async function runAiAnalyze(imageUrl, type) {
+        try {
+            const res = await fetch('/ai-analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_url: imageUrl, type: type })
+            });
+            const data = await res.json();
+
+            if(type === 'car') {
+                if(data.make) document.getElementById('car_make').value = data.make;
+                if(data.model) document.getElementById('car_model').value = data.model;
+                if(data.year) document.getElementById('car_year').value = data.year;
+                if(data.engine) document.getElementById('car_engine').value = data.engine;
+                if(data.fuel_type) document.getElementById('car_fuel').value = data.fuel_type;
+            } else {
+                if(data.title) document.getElementById('part_title').value = data.title;
+                if(data.make) document.getElementById('part_make').value = data.make;
+                if(data.model) document.getElementById('part_model').value = data.model;
+                if(data.year) document.getElementById('part_year').value = data.year;
+                if(data.oem_number) document.getElementById('part_oem').value = data.oem_number;
+            }
+        } catch(e) {
+            console.log('AI Анализ не успя да приключи:', e);
+        }
+    }
+
+    // --- 5. ФИНАНСИ ---
     async function loadFinancials() {
         const res = await fetch('/reports/financials');
         const data = await res.json();
@@ -274,6 +676,7 @@
         document.getElementById('netProfit').innerText = (revenue - expenses).toFixed(2) + ' лв.';
     }
 
+    // Първоначално зареждане
     showTab('cars');
 </script>
 </body>
