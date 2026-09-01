@@ -13,7 +13,10 @@ import google.generativeai as genai
 
 # === ИНИЦИАЛИЗАЦИЯ НА FASTAPI И JINJA2 ===
 app = FastAPI(title="Автоморга Мениджър")
-templates = Jinja2Templates(directory="templates")
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 # === НАСТРОЙКИ НА ВЪНШНИ УСЛУГИ (ENV VARIABLES) ===
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
