@@ -89,7 +89,8 @@ def check_db():
 # === HTML РЕНДЕРИРАНЕ ===
 @app.get("/", response_class=HTMLResponse)
 def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    # Коригирано за съвместимост с най-новите версии на Starlette и Jinja2
+    return templates.TemplateResponse(request=request, name="index.html")
 
 
 # === 1. СКЛАДОВЕ ===
