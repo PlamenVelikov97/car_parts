@@ -740,16 +740,10 @@
     
         container.innerHTML = '';
     
-        // ОТЛАЖДАНЕ: Показва всички уникални статуси в конзолата (F12)
-        if (globalParts && globalParts.length > 0) {
-            console.log("Всички налични статуси в базата:", globalParts.map(p => `'${p.status}'`));
-        }
-    
         let filtered = globalParts || [];
     
         if (currentPartFilter === 'active') {
             filtered = globalParts.filter(p => {
-                // Всичко, което НЕ Е продадено, се смята за НАЛИЧНО
                 if (!p.status) return true;
                 const statusLower = p.status.toString().toLowerCase().trim();
                 return !statusLower.includes('продад') && !statusLower.includes('sold');
@@ -773,7 +767,7 @@
             
             const badge = isSold 
                 ? `<span class="badge bg-danger">Продадено (${(p.sold_price || 0).toFixed(2)} лв.)</span>`
-                : `<span class="badge bg-success">Наличен (${(p.price || 0).toFixed(2)} лв.)</span>`;
+                : `<span class="badge bg-success">Налично (${(p.price || 0).toFixed(2)} лв.)</span>`;
     
             const actionButton = isSold
                 ? `<button class="btn btn-sm btn-outline-warning" onclick="returnPart(${p.id})" title="Върни в наличност">↩️ Върни</button>`
