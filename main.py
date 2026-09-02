@@ -251,21 +251,25 @@ async def upload_photos(files: List[UploadFile] = File(...)):
 
 
 # === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI 2.5 FLASH) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="Gemini API ключът не е конфигуриран.")
+        raise HTTPException(status_code=500, detail="Gemini API ключът не е конфигуриран в Render.")
 
     try:
         import requests
-        img_res = requests.get(req.photo_url)
+        
+        # 1. Изтегляне на снимката от Cloudinary
+        img_res = requests.get(req.photo_url, timeout=10)
         if img_res.status_code != 200:
             raise HTTPException(status_code=400, detail="Снимката не може да бъде изтеглена от Cloudinary.")
 
-        image_data = img_res.content
+        image_bytes = img_res.content
         mime_type = img_res.headers.get("Content-Type", "image/jpeg")
 
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        # 2. Инициализиране на Gemini модела
+        model = genai.GenerativeModel("gemini-1.5-flash")
 
         if req.type == "car":
             prompt = """
@@ -292,26 +296,28 @@ async def ai_analyze(req: AiAnalyzeRequest):
             }
             """
 
-        response = model.generate_content([
-            {"mime_type": mime_type, "data": image_data},
-            prompt
-        ])
+        # 3. Изпращане към Gemini
+        image_part = {
+            "mime_type": mime_type,
+            "data": image_bytes
+        }
 
+        response = model.generate_content([prompt, image_part])
+
+        # 4. Почистване на отговора от Markdown
         text = response.text.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.startswith("```"):
-            text = text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0]
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0]
         text = text.strip()
 
         parsed_json = json.loads(text)
         return {"result": parsed_json}
 
     except Exception as e:
+        print(f"AI Error Trace: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Грешка AI Анализ: {str(e)}")
-
 
 # === 6. ФИНАНСОВИ РЕЗУЛТАТИ ===
 @app.get("/reports/financials")
