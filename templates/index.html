@@ -512,7 +512,7 @@
                                 <button class="btn btn-sm btn-outline-warning" onclick="editCar(${c.id})">Редактирай</button>
                                 ${c.status !== 'Скрап' ? `<button class="btn btn-sm btn-outline-secondary" onclick="scrapCar(${c.id})">Скрап</button>` : ''}
                                 <button class="btn btn-sm btn-outline-danger ms-auto" onclick="deleteCar(${c.id})">Изтрий</button>
-                                <button class="btn btn-sm btn-success me-1" onclick="openQuickSellModal(${car.id}, '${car.make} ${car.model}')">
+                                <button class="btn btn-sm btn-success me-1" onclick="openQuickSellModal(${c.id}, '${c.make} ${c.model}')">
                                   <i class="bi bi-cart-check"></i> Продай част
                                 </button>
                             </div>
