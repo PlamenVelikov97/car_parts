@@ -419,19 +419,19 @@
     function renderCars() {
         const container = document.getElementById('carsContainer');
         container.innerHTML = '';
-
+    
         let filteredCars = globalCars;
         if (currentCarFilter === 'active') {
             filteredCars = globalCars.filter(c => c.status !== 'Скрап');
         } else if (currentCarFilter === 'scrap') {
             filteredCars = globalCars.filter(c => c.status === 'Скрап');
         }
-
+    
         if (filteredCars.length === 0) {
             container.innerHTML = '<div class="col-12 text-center text-muted py-4"><h5>Няма намерени коли</h5></div>';
             return;
         }
-
+    
         filteredCars.forEach(c => {
             const photos = c.photo_urls || [];
             const mainImg = (photos && photos.length > 0) ? photos[0] : defaultImg;
@@ -440,10 +440,10 @@
             const statusBadge = c.status === 'Скрап' 
                 ? '<span class="badge bg-warning text-dark">Скрап</span>' 
                 : '<span class="badge bg-success">Наличен</span>';
-
+    
             const partsList = c.parts || [];
             const soldParts = partsList.filter(p => p.status === 'Продадено');
-
+    
             let soldPartsHtml = '';
             if (soldParts.length > 0) {
                 soldPartsHtml = '<ul class="list-group list-group-flush mb-0">';
@@ -451,7 +451,13 @@
                     soldPartsHtml += `
                         <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-2 bg-transparent">
                             <span>🔩 ${sp.title}</span>
-                            <strong class="text-success">${(sp.sold_price || 0).toFixed(2)} лв.</strong>
+                            <div class="d-flex align-items-center gap-2">
+                                <strong class="text-success">${(sp.sold_price || 0).toFixed(2)} лв.</strong>
+                                <!-- БУТОН ЗА ВЪРНЕ НА ЧАСТТА В НАЛИЧНОСТ -->
+                                <button class="btn btn-sm btn-outline-warning py-0 px-1" onclick="returnPart(${sp.id})" title="Върни в наличност">
+                                    ↩️ Върни
+                                </button>
+                            </div>
                         </li>
                     `;
                 });
@@ -476,7 +482,7 @@
             } else {
                 soldPartsHtml = '<p class="text-muted mb-0 p-2 text-center"><i>Няма продадени части</i></p>';
             }
-
+    
             container.innerHTML += `
                 <div class="col-md-4 mb-4">
                     <div class="card shadow-sm h-100">
@@ -506,13 +512,13 @@
                                     </div>
                                 </div>
                             </div>
-
+    
                             <div class="d-flex gap-1 mt-auto pt-2 flex-wrap">
                                 <button class="btn btn-sm btn-outline-info" onclick="runAiCheckOnCar(${c.id})">🤖 AI Чек</button>
                                 <button class="btn btn-sm btn-outline-warning" onclick="editCar(${c.id})">Редактирай</button>
                                 ${c.status !== 'Скрап' ? `<button class="btn btn-sm btn-outline-secondary" onclick="scrapCar(${c.id})">Скрап</button>` : ''}
                                 <button class="btn btn-sm btn-outline-danger ms-auto" onclick="deleteCar(${c.id})">Изтрий</button>
-                                <button class="btn btn-sm btn-success me-1" onclick="openQuickSellModal(${c.id}, '${c.make} ${c.model}')">
+                                <button class="btn btn-sm btn-success me-1" onclick="openQuickSellModal(${c.id}, '${(c.make + ' ' + c.model).replace(/'/g, "\\'")}')">
                                   <i class="bi bi-cart-check"></i> Продай част
                                 </button>
                             </div>
@@ -947,6 +953,30 @@
 
     // Първоначално зареждане
     showTab('cars');
+    async function returnPart(partId) {
+      if (!confirm("Сигурни ли сте, че искате да върнете тази част в наличност? Сумата ще се рекалкулира.")) return;
+    
+      try {
+        // Променяме статуса обратно на "Наличен" и нулираме продажната цена
+        const response = await fetch(`/parts/${partId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "Наличен",
+            sold_price: 0
+          })
+        });
+    
+        if (!response.ok) throw new Error("Грешка при връщане на частта.");
+    
+        // Рекалкулирането става автоматично при презареждане на данните
+        loadCars();
+        loadParts();
+        alert("Частта бе върната успешно в наличност!");
+      } catch (error) {
+        alert("Грешка: " + error.message);
+      }
+    }
 </script>
 </body>
 </html>
