@@ -133,31 +133,48 @@ def get_cars():
 @app.get("/cars/summary")
 def get_cars_summary():
     check_db()
-    cars_res = supabase.table("cars").select("*, warehouses(name)").order("id", desc=True).execute()
-    cars = cars_res.data or []
+    try:
+        cars_res = supabase.table("cars").select("*, warehouses(name)").order("id", desc=True).execute()
+        cars = cars_res.data or []
 
-    parts_res = supabase.table("parts").select("id, car_id, title, status, price, sold_price").execute()
-    parts = parts_res.data or []
+        parts_res = supabase.table("parts").select("id, car_id, title, status, price, sold_price").execute()
+        parts = parts_res.data or []
 
-    result = []
-    for car in cars:
-        car_parts = [p for p in parts if p.get("car_id") == car["id"]]
-        sold_parts_sum = sum((p.get("sold_price") or 0.0) for p in car_parts if p.get("status") == "Продадено")
-        scrap_price = car.get("scrap_price") or 0.0
-        
-        total_sales = sold_parts_sum + scrap_price
-        purchase = car.get("purchase_price") or 0.0
-        net_profit = total_sales - purchase
+        result = []
+        for car in cars:
+            # Намираме частта безопасно
+            car_parts = [p for p in parts if p and p.get("car_id") == car.get("id")]
+            
+            # Изчисляваме сумата от продадените части
+            sold_parts_sum = sum(
+                float(p.get("sold_price") or 0.0) 
+                for p in car_parts 
+                if p.get("status") == "Продадено"
+            )
+            
+            scrap_price = float(car.get("scrap_price") or 0.0)
+            purchase = float(car.get("purchase_price") or 0.0)
+            
+            total_sales = sold_parts_sum + scrap_price
+            net_profit = total_sales - purchase
 
-        car_data = dict(car)
-        car_data["parts"] = car_parts
-        car_data["parts_count"] = len(car_parts)
-        car_data["total_sales"] = total_sales
-        car_data["net_profit"] = net_profit
-        car_data["title"] = f"{car.get('make', '')} {car.get('model', '')}".strip()
-        result.append(car_data)
+            car_data = dict(car)
+            car_data["parts"] = car_parts
+            car_data["parts_count"] = len(car_parts)
+            car_data["total_sales"] = total_sales
+            car_data["net_profit"] = net_profit
+            
+            # Решение за липсващ title
+            make = car.get("make") or ""
+            model = car.get("model") or ""
+            car_data["title"] = car.get("title") or f"{make} {model}".strip() or "Без име"
+            
+            result.append(car_data)
 
-    return result
+        return result
+    except Exception as e:
+        print(f"Error in /cars/summary: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Грешка при извличане на колите: {str(e)}")
 
 @app.post("/cars")
 def create_car(car: CarCreate):
@@ -214,11 +231,15 @@ def delete_car(car_id: int):
 @app.get("/parts/search")
 def search_parts(q: Optional[str] = None):
     check_db()
-    query = supabase.table("parts").select("*, warehouses(name), cars(make, model)").order("id", desc=True)
-    if q:
-        query = query.or_(f"title.ilike.%{q}%,make.ilike.%{q}%,model.ilike.%{q}%,oem_number.ilike.%{q}%")
-    res = query.execute()
-    return res.data
+    try:
+        query = supabase.table("parts").select("*, warehouses(name), cars(make, model)").order("id", desc=True)
+        if q:
+            query = query.or_(f"title.ilike.%{q}%,make.ilike.%{q}%,model.ilike.%{q}%,oem_number.ilike.%{q}%")
+        res = query.execute()
+        return res.data or []
+    except Exception as e:
+        print(f"Error in /parts/search: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Грешка при търсене на части: {str(e)}")
 
 @app.post("/parts")
 def create_part(part: PartCreate):
