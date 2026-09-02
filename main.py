@@ -69,9 +69,11 @@ class PartCreate(BaseModel):
     model: Optional[str] = None
     year: Optional[int] = None
     oem_number: Optional[str] = None
-    price: float = 0.0
-    car_id: Optional[int] = None
+    price: Optional[float] = 0.0
+    sold_price: Optional[float] = 0.0   # Добавено
+    status: Optional[str] = "Наличен"   # Добавено!
     warehouse_id: Optional[int] = None
+    car_id: Optional[int] = None
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = []
 
@@ -247,7 +249,7 @@ def create_part(part: PartCreate):
     try:
         part_data = part.model_dump() if hasattr(part, "model_dump") else part.dict()
         
-        # Ако не е подаден конкретен статус от фронтенда, тогава слагаме "Наличен" по подразбиране
+        # Ако не е подаден конкретен статус, тогава е "Наличен"
         if not part_data.get("status"):
             part_data["status"] = "Наличен"
             
