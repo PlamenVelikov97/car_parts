@@ -10,6 +10,7 @@ import cloudinary
 import cloudinary.uploader
 import google.generativeai as genai
 from pathlib import Path
+import base64
 
 # === ИНИЦИАЛИЗАЦИЯ НА FASTAPI И JINJA2 ===
 app = FastAPI(title="Автоморга Мениджър")
@@ -284,77 +285,84 @@ async def upload_photos(files: List[UploadFile] = File(...)):
 
 
 # === 5. AI АНАЛИЗ НА СНИМКИ ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI AI) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY не е зададен в Render Environment.")
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY липсва в Render Environment.")
 
     try:
         import requests
-        
-        img_res = requests.get(req.photo_url, timeout=10)
+
+        # 1. Смъкване на снимката от Cloudinary
+        img_res = requests.get(req.photo_url, timeout=12)
         if img_res.status_code != 200:
             raise HTTPException(status_code=400, detail="Снимката не може да бъде изтеглена от Cloudinary.")
 
-        image_data = img_res.content
+        image_bytes = img_res.content
         mime_type = img_res.headers.get("Content-Type", "image/jpeg")
 
-        model_names = ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash"]
-        response = None
-        last_error = None
-
+        # 2. Подготовка на промпта
         if req.type == "car":
             prompt = """
-            Анализирай това изображение на автомобил и върни САМО валиден JSON обект без markdown обвивки.
-            JSON структура:
+            Анализирай това изображение на автомобил и върни САМО валиден JSON обект без никакъв друг текст или markdown.
+            Структура:
             {
-                "make": "Марка (напр. Audi, BMW)",
-                "model": "Модел (напр. A4, X5)",
-                "year": Година (число или null),
-                "engine": "Двигател (напр. 2.0 TDI)",
-                "fuel_type": "Тип гориво (Дизел, Бензин, Газ/Бензин, Електрически, Хибрид)"
+                "make": "Марка",
+                "model": "Модел",
+                "year": Година_число_или_null,
+                "engine": "Двигател",
+                "fuel_type": "Дизел/Бензин/Хибрид/Електрически"
             }
             """
         else:
             prompt = """
-            Анализирай това изображение на авточаст и върни САМО валиден JSON обект без markdown обвивки.
-            JSON структура:
+            Анализирай това изображение на авточаст и върни САМО валиден JSON обект без никакъв друг текст или markdown.
+            Структура:
             {
-                "title": "Име на частта (напр. Предна броня, Алтернатор)",
-                "make": "Марка автомобил (ако се вижда)",
-                "model": "Модел (ако се вижда)",
-                "year": Година (число или null),
-                "oem_number": "OEM или сериен номер (ако се вижда)"
+                "title": "Име на частта",
+                "make": "Марка",
+                "model": "Модел",
+                "year": Година_число_или_null,
+                "oem_number": "OEM номер или null"
             }
             """
 
+        # 3. Форматиране на снимката за Gemini SDK
         image_part = {
-            "mime_type": mime_type,
-            "data": image_data
+            "inline_data": {
+                "data": base64.b64encode(image_bytes).decode("utf-8"),
+                "mime_type": mime_type
+            }
         }
+
+        # 4. Модели за опит (от най-новия към алтернативните)
+        model_names = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-flash"]
+        response = None
+        last_err = None
 
         for m_name in model_names:
             try:
                 model = genai.GenerativeModel(m_name)
                 response = model.generate_content([prompt, image_part])
-                if response:
+                if response and response.text:
                     break
-            except Exception as err:
-                last_error = err
-                print(f"Модел {m_name} не сработи: {err}", flush=True)
+            except Exception as e:
+                last_err = e
+                print(f"Опит с {m_name} се провали: {e}", flush=True)
 
-        if not response:
-            raise last_error or Exception("Нито един от поддържаните Gemini модели не е наличен.")
+        if not response or not response.text:
+            raise last_err or Exception("Gemini AI не върна отговор.")
 
+        # 5. Изчистване на JSON отговора
         text = response.text.strip()
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0]
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0]
-        text = text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text
+            if text.endswith("```"):
+                text = text.rsplit("```", 1)[0]
+        text = text.replace("```json", "").replace("```", "").strip()
 
-        parsed_json = json.loads(text)
-        return {"result": parsed_json}
+        return {"result": json.loads(text)}
 
     except Exception as e:
         print(f"AI Error Trace: {str(e)}", flush=True)
