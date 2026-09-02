@@ -1,6 +1,5 @@
 import os
 import json
-import base64
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.responses import HTMLResponse
@@ -10,20 +9,18 @@ from supabase import create_client, Client
 import cloudinary
 import cloudinary.uploader
 import google.generativeai as genai
+from pathlib import Path
 
 # === ИНИЦИАЛИЗАЦИЯ НА FASTAPI И JINJA2 ===
 app = FastAPI(title="Автоморга Мениджър")
-from pathlib import Path
-
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-# === НАСТРОЙКИ НА ВЪНШНИ УСЛУГИ (ENV VARIABLES) ===
+# === НАСТРОЙКИ НА ВЪНШНИ УСЛУГИ ===
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "")
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
-CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "")
-CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Свързване с Supabase
@@ -32,11 +29,13 @@ if SUPABASE_URL and SUPABASE_KEY:
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Свързване с Cloudinary
-if CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET:
+if CLOUDINARY_URL:
+    cloudinary.config(cloudinary_url=CLOUDINARY_URL)
+elif CLOUDINARY_CLOUD_NAME:
     cloudinary.config(
         cloud_name=CLOUDINARY_CLOUD_NAME,
-        api_key=CLOUDINARY_API_KEY,
-        api_secret=CLOUDINARY_API_SECRET
+        api_key=os.getenv("CLOUDINARY_API_KEY", ""),
+        api_secret=os.getenv("CLOUDINARY_API_SECRET", "")
     )
 
 # Свързване с Gemini AI
@@ -55,13 +54,13 @@ class CarCreate(BaseModel):
     year: Optional[int] = None
     engine: Optional[str] = None
     fuel_type: Optional[str] = None
-    purchase_price: float
+    purchase_price: float = 0.0
     warehouse_id: Optional[int] = None
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = []
 
 class CarScrap(BaseModel):
-    scrap_price: float
+    scrap_price: float = 0.0
 
 class PartCreate(BaseModel):
     title: str
@@ -69,14 +68,14 @@ class PartCreate(BaseModel):
     model: Optional[str] = None
     year: Optional[int] = None
     oem_number: Optional[str] = None
-    price: float
+    price: float = 0.0
     car_id: Optional[int] = None
     warehouse_id: Optional[int] = None
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = []
 
 class PartSell(BaseModel):
-    sold_price: float
+    sold_price: float = 0.0
 
 class AiAnalyzeRequest(BaseModel):
     photo_url: str
@@ -92,7 +91,6 @@ def check_db():
 # === HTML РЕНДЕРИРАНЕ ===
 @app.get("/", response_class=HTMLResponse)
 def read_root(request: Request):
-    # Коригирано за съвместимост с най-новите версии на Starlette и Jinja2
     return templates.TemplateResponse(request=request, name="index.html")
 
 
@@ -106,13 +104,15 @@ def get_warehouses():
 @app.post("/warehouses")
 def create_warehouse(wh: WarehouseCreate):
     check_db()
-    res = supabase.table("warehouses").insert(wh.dict()).execute()
+    data = wh.model_dump() if hasattr(wh, "model_dump") else wh.dict()
+    res = supabase.table("warehouses").insert(data).execute()
     return res.data
 
 @app.put("/warehouses/{wh_id}")
 def update_warehouse(wh_id: int, wh: WarehouseCreate):
     check_db()
-    res = supabase.table("warehouses").update(wh.dict()).eq("id", wh_id).execute()
+    data = wh.model_dump() if hasattr(wh, "model_dump") else wh.dict()
+    res = supabase.table("warehouses").update(data).eq("id", wh_id).execute()
     return res.data
 
 @app.delete("/warehouses/{wh_id}")
@@ -161,26 +161,39 @@ def get_cars_summary():
 @app.post("/cars")
 def create_car(car: CarCreate):
     check_db()
-    car_data = car.dict()
-    car_data["status"] = "Наличен"
-    res = supabase.table("cars").insert(car_data).execute()
-    return res.data
+    try:
+        car_data = car.model_dump() if hasattr(car, "model_dump") else car.dict()
+        car_data["status"] = "Наличен"
+        res = supabase.table("cars").insert(car_data).execute()
+        return res.data
+    except Exception as e:
+        print(f"Error creating car: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Грешка при запис на кола: {str(e)}")
 
 @app.put("/cars/{car_id}")
 def update_car(car_id: int, car: CarCreate):
     check_db()
-    res = supabase.table("cars").update(car.dict()).eq("id", car_id).execute()
-    return res.data
+    try:
+        car_data = car.model_dump() if hasattr(car, "model_dump") else car.dict()
+        res = supabase.table("cars").update(car_data).eq("id", car_id).execute()
+        return res.data
+    except Exception as e:
+        print(f"Error updating car: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Грешка при дублиране/редакция: {str(e)}")
 
 @app.put("/cars/{car_id}/scrap")
 def scrap_car(car_id: int, scrap: CarScrap):
     check_db()
-    data = {
-        "status": "Скрап",
-        "scrap_price": scrap.scrap_price
-    }
-    res = supabase.table("cars").update(data).eq("id", car_id).execute()
-    return res.data
+    try:
+        data = {
+            "status": "Скрап",
+            "scrap_price": scrap.scrap_price
+        }
+        res = supabase.table("cars").update(data).eq("id", car_id).execute()
+        return res.data
+    except Exception as e:
+        print(f"Error scraping car: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Грешка при скрапиране: {str(e)}")
 
 @app.delete("/cars/{car_id}")
 def delete_car(car_id: int):
@@ -203,26 +216,39 @@ def search_parts(q: Optional[str] = None):
 @app.post("/parts")
 def create_part(part: PartCreate):
     check_db()
-    part_data = part.dict()
-    part_data["status"] = "Наличен"
-    res = supabase.table("parts").insert(part_data).execute()
-    return res.data
+    try:
+        part_data = part.model_dump() if hasattr(part, "model_dump") else part.dict()
+        part_data["status"] = "Наличен"
+        res = supabase.table("parts").insert(part_data).execute()
+        return res.data
+    except Exception as e:
+        print(f"Error creating part: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Грешка при запис на част: {str(e)}")
 
 @app.put("/parts/{part_id}")
 def update_part(part_id: int, part: PartCreate):
     check_db()
-    res = supabase.table("parts").update(part.dict()).eq("id", part_id).execute()
-    return res.data
+    try:
+        part_data = part.model_dump() if hasattr(part, "model_dump") else part.dict()
+        res = supabase.table("parts").update(part_data).eq("id", part_id).execute()
+        return res.data
+    except Exception as e:
+        print(f"Error updating part: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Грешка при редакция на част: {str(e)}")
 
 @app.put("/parts/{part_id}/sell")
 def sell_part(part_id: int, sell: PartSell):
     check_db()
-    data = {
-        "status": "Продадено",
-        "sold_price": sell.sold_price
-    }
-    res = supabase.table("parts").update(data).eq("id", part_id).execute()
-    return res.data
+    try:
+        data = {
+            "status": "Продадено",
+            "sold_price": sell.sold_price
+        }
+        res = supabase.table("parts").update(data).eq("id", part_id).execute()
+        return res.data
+    except Exception as e:
+        print(f"Error selling part: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Грешка при продажба: {str(e)}")
 
 @app.delete("/parts/{part_id}")
 def delete_part(part_id: int):
@@ -234,7 +260,7 @@ def delete_part(part_id: int):
 # === 4. КАЧВАНЕ НА СНИМКИ (CLOUDINARY) ===
 @app.post("/upload-photos")
 async def upload_photos(files: List[UploadFile] = File(...)):
-    if not CLOUDINARY_CLOUD_NAME:
+    if not (CLOUDINARY_URL or CLOUDINARY_CLOUD_NAME):
         raise HTTPException(status_code=500, detail="Cloudinary не е конфигуриран на сървъра.")
 
     uploaded_urls = []
@@ -245,14 +271,13 @@ async def upload_photos(files: List[UploadFile] = File(...)):
             if "secure_url" in res:
                 uploaded_urls.append(res["secure_url"])
         except Exception as e:
+            print(f"Cloudinary error: {e}", flush=True)
             raise HTTPException(status_code=500, detail=f"Грешка при качване в Cloudinary: {str(e)}")
 
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI 2.5 FLASH) ===
-# === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI) ===
-# === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
@@ -261,7 +286,6 @@ async def ai_analyze(req: AiAnalyzeRequest):
     try:
         import requests
         
-        # 1. Изтегляне на изображението от Cloudinary
         img_res = requests.get(req.photo_url, timeout=10)
         if img_res.status_code != 200:
             raise HTTPException(status_code=400, detail="Снимката не може да бъде изтеглена от Cloudinary.")
@@ -269,8 +293,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
         image_data = img_res.content
         mime_type = img_res.headers.get("Content-Type", "image/jpeg")
 
-        # 2. Опит с няколко имена на модели за максимална съвместимост
-        model_names = ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-flash"]
+        model_names = ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-1.5-flash"]
         response = None
         last_error = None
 
@@ -304,7 +327,6 @@ async def ai_analyze(req: AiAnalyzeRequest):
             "data": image_data
         }
 
-        # Пробваме всеки модел подред, докато един сработи
         for m_name in model_names:
             try:
                 model = genai.GenerativeModel(m_name)
@@ -331,6 +353,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
     except Exception as e:
         print(f"AI Error Trace: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=f"Грешка AI Анализ: {str(e)}")
+
 
 # === 6. ФИНАНСОВИ РЕЗУЛТАТИ ===
 @app.get("/reports/financials")
