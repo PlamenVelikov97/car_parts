@@ -302,7 +302,34 @@ async def ai_analyze(req: AiAnalyzeRequest):
         image_b64 = base64.b64encode(img_res.content).decode("utf-8")
         mime_type = img_res.headers.get("Content-Type", "image/jpeg")
 
-        # 2. Подготовка на промпта
+        # 2. Динамично вземане на списъка с налични модели от Google API
+        list_models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
+        models_res = requests.get(list_models_url, timeout=10)
+
+        if models_res.status_code != 200:
+            raise Exception(f"Грешка при вземане на модели: {models_res.text}")
+
+        available_models = models_res.json().get("models", [])
+        
+        # Филтрираме само моделите, поддържащи generateContent и с думата 'flash' или 'gemini'
+        valid_model_names = [
+            m["name"].replace("models/", "") 
+            for m in available_models 
+            if "generateContent" in m.get("supportedGenerationMethods", []) and "flash" in m["name"]
+        ]
+
+        # Ако няма flash модел, вземаме първия наличен с generateContent
+        if not valid_model_names:
+            valid_model_names = [
+                m["name"].replace("models/", "") 
+                for m in available_models 
+                if "generateContent" in m.get("supportedGenerationMethods", [])
+            ]
+
+        if not valid_model_names:
+            raise Exception(f"Няма намерени поддържани Gemini модели за този API ключ. Налични: {[m['name'] for m in available_models]}")
+
+        # 3. Подготовка на промпта
         if req.type == "car":
             prompt = """
             Анализирай това изображение на автомобил и върни САМО валиден JSON обект без markdown обвивки.
@@ -342,12 +369,11 @@ async def ai_analyze(req: AiAnalyzeRequest):
             }]
         }
 
-        # 3. Опит с новите валидни модели за 2026 г.
-        supported_models = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash-latest"]
+        # 4. Пробваме намерените валидни модели
         res_data = None
         last_error_msg = ""
 
-        for model_name in supported_models:
+        for model_name in valid_model_names:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
             api_res = requests.post(url, json=payload, timeout=15)
             
@@ -359,9 +385,9 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 print(last_error_msg, flush=True)
 
         if not res_data:
-            raise Exception(f"Никой от Gemini моделите не сработи. Последна грешка: {last_error_msg}")
+            raise Exception(f"Нито един от активните модели ({valid_model_names}) не успя да обработи заявката. Последна грешка: {last_error_msg}")
 
-        # 4. Извличане и почистване на JSON отговора
+        # 5. Извличане и почистване на JSON отговора
         raw_text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
         
         clean_text = raw_text
