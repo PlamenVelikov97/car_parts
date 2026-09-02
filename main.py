@@ -70,12 +70,26 @@ class PartCreate(BaseModel):
     year: Optional[int] = None
     oem_number: Optional[str] = None
     price: Optional[float] = 0.0
-    sold_price: Optional[float] = 0.0   # Добавено
-    status: Optional[str] = "Наличен"   # Добавено!
+    sold_price: Optional[float] = 0.0
+    status: Optional[str] = "Наличен"
     warehouse_id: Optional[int] = None
     car_id: Optional[int] = None
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = []
+
+class PartUpdate(BaseModel):
+    title: Optional[str] = None
+    make: Optional[str] = None
+    model: Optional[str] = None
+    year: Optional[int] = None
+    oem_number: Optional[str] = None
+    price: Optional[float] = None
+    sold_price: Optional[float] = None   # Задължително за връщане/продажба
+    status: Optional[str] = None       # Задължително за промяна на статус
+    warehouse_id: Optional[int] = None
+    car_id: Optional[int] = None
+    notes: Optional[str] = None
+    photo_urls: Optional[List[str]] = None
 
 class PartSell(BaseModel):
     sold_price: float = 0.0
@@ -260,15 +274,20 @@ def create_part(part: PartCreate):
         raise HTTPException(status_code=500, detail=f"Грешка при запис на част: {str(e)}")
 
 @app.put("/parts/{part_id}")
-def update_part(part_id: int, part: PartCreate):
+def update_part(part_id: int, part: PartUpdate):
     check_db()
     try:
-        part_data = part.model_dump() if hasattr(part, "model_dump") else part.dict()
-        res = supabase.table("parts").update(part_data).eq("id", part_id).execute()
+        # Вземаме само изпратените стойности (игнорира липсващите)
+        update_data = part.model_dump(exclude_unset=True) if hasattr(part, "model_dump") else part.dict(exclude_unset=True)
+        
+        if not update_data:
+            raise HTTPException(status_code=400, detail="Няма предоставени данни за промяна.")
+
+        res = supabase.table("parts").update(update_data).eq("id", part_id).execute()
         return res.data
     except Exception as e:
-        print(f"Error updating part: {str(e)}", flush=True)
-        raise HTTPException(status_code=500, detail=f"Грешка при редакция на част: {str(e)}")
+        print(f"Error updating part {part_id}: {str(e)}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Грешка при дублиране/обновяване: {str(e)}")
 
 @app.put("/parts/{part_id}/sell")
 def sell_part(part_id: int, sell: PartSell):
