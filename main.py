@@ -294,31 +294,30 @@ async def ai_analyze(req: AiAnalyzeRequest):
     try:
         import requests
 
-        # 1. Изтегляне на снимката от Cloudinary
-        img_res = requests.get(req.photo_url, timeout=10)
+        # 1. Изтегляне на снимката от Cloudinary (с увеличен timeout)
+        img_res = requests.get(req.photo_url, timeout=15)
         if img_res.status_code != 200:
             raise HTTPException(status_code=400, detail="Снимката не може да бъде изтеглена от Cloudinary.")
 
         image_b64 = base64.b64encode(img_res.content).decode("utf-8")
         mime_type = img_res.headers.get("Content-Type", "image/jpeg")
 
-        # 2. Динамично вземане на списъка с налични модели от Google API
+        # 2. Динамично вземане на списъка с налични модели
         list_models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
-        models_res = requests.get(list_models_url, timeout=10)
+        models_res = requests.get(list_models_url, timeout=15)
 
         if models_res.status_code != 200:
             raise Exception(f"Грешка при вземане на модели: {models_res.text}")
 
         available_models = models_res.json().get("models", [])
         
-        # Филтрираме само моделите, поддържащи generateContent и с думата 'flash' или 'gemini'
+        # Пред предпочитание даваме на бързите 'flash' модели
         valid_model_names = [
             m["name"].replace("models/", "") 
             for m in available_models 
             if "generateContent" in m.get("supportedGenerationMethods", []) and "flash" in m["name"]
         ]
 
-        # Ако няма flash модел, вземаме първия наличен с generateContent
         if not valid_model_names:
             valid_model_names = [
                 m["name"].replace("models/", "") 
@@ -327,7 +326,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
             ]
 
         if not valid_model_names:
-            raise Exception(f"Няма намерени поддържани Gemini модели за този API ключ. Налични: {[m['name'] for m in available_models]}")
+            raise Exception("Няма намерени поддържани Gemini модели.")
 
         # 3. Подготовка на промпта
         if req.type == "car":
@@ -369,23 +368,26 @@ async def ai_analyze(req: AiAnalyzeRequest):
             }]
         }
 
-        # 4. Пробваме намерените валидни модели
+        # 4. Пробваме моделите с увеличен timeout до 45 секунди
         res_data = None
         last_error_msg = ""
 
         for model_name in valid_model_names:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
-            api_res = requests.post(url, json=payload, timeout=15)
-            
-            if api_res.status_code == 200:
-                res_data = api_res.json()
-                break
-            else:
-                last_error_msg = f"Модел {model_name} върна {api_res.status_code}: {api_res.text}"
+            try:
+                api_res = requests.post(url, json=payload, timeout=45)
+                
+                if api_res.status_code == 200:
+                    res_data = api_res.json()
+                    break
+                else:
+                    last_error_msg = f"Модел {model_name} върна status {api_res.status_code}"
+            except requests.exceptions.Timeout:
+                last_error_msg = f"Модел {model_name} надвиши ограничението за време (Timeout)."
                 print(last_error_msg, flush=True)
 
         if not res_data:
-            raise Exception(f"Нито един от активните модели ({valid_model_names}) не успя да обработи заявката. Последна грешка: {last_error_msg}")
+            raise Exception(f"Нито един модел не отговори навреме. Последна грешка: {last_error_msg}")
 
         # 5. Извличане и почистване на JSON отговора
         raw_text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
