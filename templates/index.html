@@ -544,13 +544,12 @@
       event.preventDefault();
     
       const carId = parseInt(document.getElementById("qs_car_id").value);
-      const carName = document.getElementById("qs_car_name").value; // Напр. "BMW X5"
+      const carName = document.getElementById("qs_car_name").value; 
       const title = document.getElementById("qs_part_title").value;
       const oemNumber = document.getElementById("qs_oem").value;
       const soldPrice = parseFloat(document.getElementById("qs_sold_price").value) || 0;
       const notes = document.getElementById("qs_notes").value;
     
-      // Разделяме марката и модела от името на колата за по-добра организация
       const carNameParts = carName.split(" ");
       const make = carNameParts[0] || "";
       const model = carNameParts.slice(1).join(" ") || "";
@@ -560,9 +559,9 @@
         make: make,
         model: model,
         oem_number: oemNumber,
-        price: soldPrice,
-        sold_price: soldPrice,
-        status: "Продадено", // Записваме директно като продадено
+        price: soldPrice,        // Изходна цена
+        sold_price: soldPrice,   // Продажна цена
+        status: "Продадено",     // Директно Продадено!
         car_id: carId,
         notes: notes,
         photo_urls: []
@@ -580,15 +579,15 @@
           throw new Error(err.detail || "Грешка при запис на продажбата.");
         }
     
-        // Затваряне на модалния прозорец
+        // Скриваме модала
         const modalEl = document.getElementById("quickSellPartModal");
         const modal = bootstrap.Modal.getInstance(modalEl);
         if (modal) modal.hide();
     
-        // Обновяване на списъците
+        // Обновяваме данните в сайта
         if (typeof loadCars === "function") loadCars();
         if (typeof loadParts === "function") loadParts();
-        alert("Продажбата бе записана успешно като ПРОДАДЕНА част!");
+        alert("Частта беше продадена и записана успешно!");
     
       } catch (error) {
         alert("Грешка: " + error.message);
