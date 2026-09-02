@@ -93,10 +93,19 @@
 
     <!-- 2. ТАБ: АВТОЧАСТИ -->
     <div id="partsTab" class="tab-content" style="display:none;">
-        <div class="d-flex justify-content-between mb-3">
-            <h3>Налични Части</h3>
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h3>Авточасти</h3>
+            
+            <!-- БУТОНИ ЗА ФИЛТРИРАНЕ -->
+            <div class="btn-group" role="group" id="partsFilterGroup">
+                <button type="button" class="btn btn-outline-secondary active" id="part-filter-all" onclick="filterParts('all')">Всички</button>
+                <button type="button" class="btn btn-outline-success" id="part-filter-active" onclick="filterParts('active')">Налични</button>
+                <button type="button" class="btn btn-outline-danger" id="part-filter-sold" onclick="filterParts('sold')">Продадени</button>
+            </div>
+    
             <button class="btn btn-success" onclick="openPartModal()">+ Добави Част</button>
         </div>
+    
         <div class="row" id="partsContainer"></div>
     </div>
 
@@ -307,7 +316,9 @@
     let globalWarehouses = [];
     let globalCars = [];
     let currentCarFilter = 'all';
-
+    let globalParts = []; // Пази оригиналния списък от части
+    let currentPartFilter = 'all'; // Пази текущия активен филтър
+    
     const carModal = new bootstrap.Modal(document.getElementById('carModal'));
     const partModal = new bootstrap.Modal(document.getElementById('partModal'));
     const whModal = new bootstrap.Modal(document.getElementById('warehouseModal'));
@@ -696,42 +707,47 @@
     }
 
     // --- 3. АВТОЧАСТИ ---
+// 1. Актуализирай loadParts за да запазва данните в globalParts
     async function loadParts() {
-        await loadCars();
-        const res = await fetch('/parts/search');
-        const parts = await res.json();
-        const container = document.getElementById('partsContainer');
-        container.innerHTML = '';
-
-        parts.forEach(p => {
-            const photos = p.photo_urls || [];
-            const mainImg = (photos && photos.length > 0) ? photos[0] : defaultImg;
-            const isSold = p.status === 'Продадено';
-
-            container.innerHTML += `
-                <div class="col-md-4 mb-4">
-                    <div class="card shadow-sm h-100">
-                        <img src="${mainImg}" class="card-img-top" alt="${p.title}">
-                        <div class="card-body">
-                            <h5 class="card-title">${p.title}</h5>
-                            <p class="card-text mb-1">За: <strong>${p.make || ''} ${p.model || ''}</strong> (${p.year || '-'})</p>
-                            <p class="card-text mb-1">OEM: <strong>${p.oem_number || '-'}</strong></p>
-                            <p class="card-text mb-1">Склад: <strong>${p.warehouses ? p.warehouses.name : '-'}</strong></p>
-                            <hr>
-                            <p class="card-text mb-1">Цена: <strong>${p.price} лв.</strong></p>
-                            <p class="card-text mb-2">Статус: <span class="badge ${isSold ? 'bg-danger' : 'bg-primary'}">${p.status}</span> ${isSold ? `(Продадена за ${p.sold_price} лв.)` : ''}</p>
-                            ${p.notes ? `<p class="small text-muted mb-2"><i>Бележка: ${p.notes}</i></p>` : ''}
-                            <div class="d-flex gap-1 mt-2 flex-wrap">
-                                <button class="btn btn-sm btn-outline-info" onclick="runAiCheckOnPart(${p.id})">🤖 AI Чек</button>
-                                ${!isSold ? `<button class="btn btn-sm btn-success" onclick="sellPart(${p.id})">Продай</button>` : ''}
-                                <button class="btn btn-sm btn-outline-warning" onclick="editPart(${p.id})">Редактирай</button>
-                                <button class="btn btn-sm btn-outline-danger ms-auto" onclick="deletePart(${p.id})">Изтрий</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
+        try {
+            const res = await fetch("/parts/search");
+            if (!res.ok) throw new Error("Грешка при зареждане на частите");
+            
+            globalParts = await res.json();
+            renderParts(); // Извиква чертането според активния филтър
+        } catch (err) {
+            console.error("loadParts error:", err);
+        }
+    }
+    
+    // 2. Функция за смяна на филтъра и визуално превключване на бутоните
+    function filterParts(filterType) {
+        currentPartFilter = filterType;
+    
+        // Премахваме 'active' от всички бутони за части
+        document.querySelectorAll('#partsFilterGroup .btn').forEach(btn => btn.classList.remove('active'));
+    
+        // Слагаме 'active' на натиснатия бутон
+        if (filterType === 'all') document.getElementById('part-filter-all').classList.add('active');
+        if (filterType === 'active') document.getElementById('part-filter-active').classList.add('active');
+        if (filterType === 'sold') document.getElementById('part-filter-sold').classList.add('active');
+    
+        renderParts();
+    }
+    
+    // 3. Функция за рендериране/филтриране на частите
+    function renderParts() {
+        let filtered = globalParts;
+    
+        if (currentPartFilter === 'active') {
+            filtered = globalParts.filter(p => p.status === 'Наличен' || !p.status);
+        } else if (currentPartFilter === 'sold') {
+            filtered = globalParts.filter(p => p.status === 'Продадено');
+        }
+    
+        // ТУК ИЗВИКАЙ ТВОЯТА ФУНКЦИЯ, КОЯТО ЧЕРТАЕ ТАБЛИЦАТА/КАРТИТЕ С ЧАСТИ
+        // Ако функцията ти се казва например displayParts(filtered) или renderPartsTable(filtered):
+        displayPartsList(filtered); 
     }
 
     function openPartModal() {
