@@ -26,7 +26,7 @@
         <li class="nav-item"><a class="nav-link" id="tab-financials" onclick="showTab('financials')">📊 Резултати</a></li>
     </ul>
 
-    <!-- 1. ТАБ: КОЛИ-ДОНОРИ -->
+<!-- 1. ТАБ: КОЛИ-ДОНОРИ -->
     <div id="carsTab" class="tab-content">
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <h3>Коли в моргата</h3>
@@ -42,6 +42,54 @@
         </div>
         <div class="row" id="carsContainer"></div>
     </div>
+
+        <!-- МОДАЛЕН ПРОЗОРЕЦ ЗА БЪРЗА ПРОДАЖБА НА ЧАСТ ОТ КОЛА -->
+        <div class="modal fade" id="quickSellPartModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Продажба на част от кола</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+              </div>
+              <div class="modal-body">
+                <form id="quickSellForm" onsubmit="submitQuickSellPart(event)">
+                  <input type="hidden" id="qs_car_id">
+                  
+                  <div class="mb-3">
+                    <label class="form-label">Кола-донор</label>
+                    <input type="text" id="qs_car_name" class="form-control" readonly style="background-color: #e9ecef;">
+                  </div>
+    
+                  <div class="mb-3">
+                    <label class="form-label">Име / Наименование на частта *</label>
+                    <input type="text" id="qs_part_title" class="form-control" placeholder="напр. Предна броня, Алтернатор" required>
+                  </div>
+    
+                  <div class="row">
+                    <div class="col-md-6 mb-3">
+                      <label class="form-label">OEM номер</label>
+                      <input type="text" id="qs_oem" class="form-control" placeholder="незадължително">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                      <label class="form-label">Продажна цена (лв.) *</label>
+                      <input type="number" step="0.01" id="qs_sold_price" class="form-control" placeholder="0.00" required>
+                    </div>
+                  </div>
+    
+                  <div class="mb-3">
+                    <label class="form-label">Бележки</label>
+                    <textarea id="qs_notes" class="form-control" rows="2"></textarea>
+                  </div>
+    
+                  <div class="modal-footer px-0 pb-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отказ</button>
+                    <button type="submit" class="btn btn-success">Запиши продажбата</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
 
     <!-- 2. ТАБ: АВТОЧАСТИ -->
     <div id="partsTab" class="tab-content" style="display:none;">
@@ -464,6 +512,9 @@
                                 <button class="btn btn-sm btn-outline-warning" onclick="editCar(${c.id})">Редактирай</button>
                                 ${c.status !== 'Скрап' ? `<button class="btn btn-sm btn-outline-secondary" onclick="scrapCar(${c.id})">Скрап</button>` : ''}
                                 <button class="btn btn-sm btn-outline-danger ms-auto" onclick="deleteCar(${c.id})">Изтрий</button>
+                                <button class="btn btn-sm btn-success me-1" onclick="openQuickSellModal(${car.id}, '${car.make} ${car.model}')">
+                                  <i class="bi bi-cart-check"></i> Продай част
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -472,6 +523,67 @@
         });
     }
 
+    // 1. Отваряне на модала за бърза продажба и попълване на данните
+    function openQuickSellModal(carId, carName) {
+        document.getElementById("qs_car_id").value = carId;
+        document.getElementById("qs_car_name").value = carName;
+        document.getElementById("qs_part_title").value = "";
+        document.getElementById("qs_oem").value = "";
+        document.getElementById("qs_sold_price").value = "";
+        document.getElementById("qs_notes").value = "";
+
+        const modalEl = document.getElementById("quickSellPartModal");
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+
+    // 2. Изпращане на заявка за продажба
+    async function submitQuickSellPart(event) {
+        event.preventDefault();
+
+        const carId = parseInt(document.getElementById("qs_car_id").value);
+        const title = document.getElementById("qs_part_title").value;
+        const oemNumber = document.getElementById("qs_oem").value;
+        const soldPrice = parseFloat(document.getElementById("qs_sold_price").value) || 0;
+        const notes = document.getElementById("qs_notes").value;
+
+        const partPayload = {
+            title: title,
+            oem_number: oemNumber,
+            price: soldPrice,
+            sold_price: soldPrice,
+            status: "Продадено",
+            car_id: carId,
+            notes: notes,
+            photo_urls: []
+        };
+
+        try {
+            const response = await fetch("/parts", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(partPayload)
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.detail || "Грешка при запис на продажбата.");
+            }
+
+            // Скриване на модалния прозорец
+            const modalEl = document.getElementById("quickSellPartModal");
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+
+            // Презареждане на данните
+            if (typeof loadCars === "function") loadCars();
+            if (typeof loadParts === "function") loadParts();
+            alert("Продажбата бе записана успешно!");
+
+        } catch (error) {
+            alert("Грешка: " + error.message);
+        }
+    }
     function populateCarSelect() {
         const select = document.getElementById('part_car');
         select.innerHTML = '<option value="">Без обвързване с кола</option>';
