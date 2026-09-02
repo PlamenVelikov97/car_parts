@@ -225,7 +225,11 @@ def create_part(part: PartCreate):
     check_db()
     try:
         part_data = part.model_dump() if hasattr(part, "model_dump") else part.dict()
-        part_data["status"] = "Наличен"
+        
+        # Ако не е подаден конкретен статус от фронтенда, тогава слагаме "Наличен" по подразбиране
+        if not part_data.get("status"):
+            part_data["status"] = "Наличен"
+            
         res = supabase.table("parts").insert(part_data).execute()
         return res.data
     except Exception as e:
