@@ -163,7 +163,13 @@ def create_car(car: CarCreate):
     check_db()
     try:
         car_data = car.model_dump() if hasattr(car, "model_dump") else car.dict()
-        car_data["status"] = "Наличен"
+        
+        # Генерираме задължителното поле 'title' за Supabase
+        car_data["title"] = f"{car.make} {car.model}".strip()
+        
+        # Премахваме 'status', ако не си добавил колоната в Supabase
+        # car_data.pop("status", None) 
+        
         res = supabase.table("cars").insert(car_data).execute()
         return res.data
     except Exception as e:
