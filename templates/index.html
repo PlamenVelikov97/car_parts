@@ -743,9 +743,19 @@
         let filtered = globalParts || [];
     
         if (currentPartFilter === 'active') {
-            filtered = globalParts.filter(p => p.status === 'Наличен' || !p.status);
+            // Проверява за 'Наличен', 'Налична', празен статус или несъществуващ такъв
+            filtered = globalParts.filter(p => {
+                if (!p.status) return true; // Ако няма статус, приемаме че е налична
+                const statusLower = p.status.toString().toLowerCase().trim();
+                return statusLower === 'наличен' || statusLower === 'налична' || statusLower === 'active';
+            });
         } else if (currentPartFilter === 'sold') {
-            filtered = globalParts.filter(p => p.status === 'Продадено');
+            // Проверява за продадени части
+            filtered = globalParts.filter(p => {
+                if (!p.status) return false;
+                const statusLower = p.status.toString().toLowerCase().trim();
+                return statusLower === 'продадено' || statusLower === 'продадена' || statusLower === 'sold';
+            });
         }
     
         if (filtered.length === 0) {
@@ -755,7 +765,7 @@
     
         // Генериране на карти за всяка част
         filtered.forEach(p => {
-            const isSold = p.status === 'Продадено';
+            const isSold = p.status && (p.status.toString().toLowerCase().includes('продад'));
             const photo = (p.photo_urls && p.photo_urls.length > 0) ? p.photo_urls[0] : defaultImg;
             
             const badge = isSold 
