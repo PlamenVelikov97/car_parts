@@ -707,27 +707,25 @@
     }
 
     // --- 3. АВТОЧАСТИ ---
-// 1. Актуализирай loadParts за да запазва данните в globalParts
+    // 1. Зареждане на частите от сървъра
     async function loadParts() {
         try {
             const res = await fetch("/parts/search");
             if (!res.ok) throw new Error("Грешка при зареждане на частите");
             
             globalParts = await res.json();
-            renderParts(); // Извиква чертането според активния филтър
+            renderParts();
         } catch (err) {
             console.error("loadParts error:", err);
         }
     }
     
-    // 2. Функция за смяна на филтъра и визуално превключване на бутоните
+    // 2. Превключване на филтрите
     function filterParts(filterType) {
         currentPartFilter = filterType;
     
-        // Премахваме 'active' от всички бутони за части
+        // Смяна на активния бутон визуално
         document.querySelectorAll('#partsFilterGroup .btn').forEach(btn => btn.classList.remove('active'));
-    
-        // Слагаме 'active' на натиснатия бутон
         if (filterType === 'all') document.getElementById('part-filter-all').classList.add('active');
         if (filterType === 'active') document.getElementById('part-filter-active').classList.add('active');
         if (filterType === 'sold') document.getElementById('part-filter-sold').classList.add('active');
@@ -735,9 +733,14 @@
         renderParts();
     }
     
-    // 3. Функция за рендериране/филтриране на частите
+    // 3. Изчертаване на частите според филтъра
     function renderParts() {
-        let filtered = globalParts;
+        const container = document.getElementById('partsContainer');
+        if (!container) return;
+    
+        container.innerHTML = '';
+    
+        let filtered = globalParts || [];
     
         if (currentPartFilter === 'active') {
             filtered = globalParts.filter(p => p.status === 'Наличен' || !p.status);
@@ -745,9 +748,46 @@
             filtered = globalParts.filter(p => p.status === 'Продадено');
         }
     
-        // ТУК ИЗВИКАЙ ТВОЯТА ФУНКЦИЯ, КОЯТО ЧЕРТАЕ ТАБЛИЦАТА/КАРТИТЕ С ЧАСТИ
-        // Ако функцията ти се казва например displayParts(filtered) или renderPartsTable(filtered):
-        displayPartsList(filtered); 
+        if (filtered.length === 0) {
+            container.innerHTML = '<div class="col-12 text-center text-muted py-4"><h5>Няма намерени части</h5></div>';
+            return;
+        }
+    
+        // Генериране на карти за всяка част
+        filtered.forEach(p => {
+            const isSold = p.status === 'Продадено';
+            const photo = (p.photo_urls && p.photo_urls.length > 0) ? p.photo_urls[0] : defaultImg;
+            
+            const badge = isSold 
+                ? `<span class="badge bg-danger">Продадено (${(p.sold_price || 0).toFixed(2)} лв.)</span>`
+                : `<span class="badge bg-success">Наличен (${(p.price || 0).toFixed(2)} лв.)</span>`;
+    
+            // Бутон за действие: ако е продадено -> Върни, ако е налично -> Продай
+            const actionButton = isSold
+                ? `<button class="btn btn-sm btn-outline-warning" onclick="returnPart(${p.id})" title="Върни в наличност">↩️ Върни</button>`
+                : `<button class="btn btn-sm btn-success" onclick="openQuickSellPartModal(${p.id})">🛒 Продай</button>`;
+    
+            container.innerHTML += `
+                <div class="col-md-4 col-lg-3 mb-3">
+                    <div class="card shadow-sm h-100">
+                        <img src="${photo}" onerror="this.onerror=null; this.src='${defaultImg}';" class="card-img-top" style="height: 160px; object-fit: cover;" alt="${p.title}">
+                        <div class="card-body d-flex flex-column">
+                            <h6 class="card-title fw-bold mb-1">${p.title}</h6>
+                            <p class="small text-muted mb-2">${p.oem_number ? 'OEM: ' + p.oem_number : ''}</p>
+                            <div class="mb-2">${badge}</div>
+                            
+                            <div class="mt-auto d-flex justify-content-between align-items-center pt-2">
+                                ${actionButton}
+                                <div>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="editPart(${p.id})">✏️</button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deletePart(${p.id})">🗑️</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
     }
 
     function openPartModal() {
