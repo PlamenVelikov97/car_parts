@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Автоморга Мениджър</title>
-    <link href="[https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css](https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css)" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
         body { background-color: #f4f6f9; }
         .nav-tabs .nav-link { font-weight: bold; cursor: pointer; }
@@ -250,8 +250,10 @@
     </div>
 </div>
 
-<script src="[https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js](https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js)"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    const defaultImg = "https://via.placeholder.com/150";
+    
     let carPhotos = [];
     let partPhotos = [];
     let globalWarehouses = [];
@@ -262,7 +264,6 @@
     const partModal = new bootstrap.Modal(document.getElementById('partModal'));
     const whModal = new bootstrap.Modal(document.getElementById('warehouseModal'));
 
-    const defaultImg = "data:image/svg+xml,%3Csvg xmlns='[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)' width='300' height='180' viewBox='0 0 300 180'%3E%3Crect width='100%25' height='100%25' fill='%23e9ecef'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%236c757d'%3EНяма Снимка%3C/text%3E%3C/svg%3E";
 
     function showTab(tabName) {
         document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
