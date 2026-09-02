@@ -740,21 +740,25 @@
     
         container.innerHTML = '';
     
+        // ОТЛАЖДАНЕ: Показва всички уникални статуси в конзолата (F12)
+        if (globalParts && globalParts.length > 0) {
+            console.log("Всички налични статуси в базата:", globalParts.map(p => `'${p.status}'`));
+        }
+    
         let filtered = globalParts || [];
     
         if (currentPartFilter === 'active') {
-            // Проверява за 'Наличен', 'Налична', празен статус или несъществуващ такъв
             filtered = globalParts.filter(p => {
-                if (!p.status) return true; // Ако няма статус, приемаме че е налична
+                // Всичко, което НЕ Е продадено, се смята за НАЛИЧНО
+                if (!p.status) return true;
                 const statusLower = p.status.toString().toLowerCase().trim();
-                return statusLower === 'наличен' || statusLower === 'налична' || statusLower === 'active';
+                return !statusLower.includes('продад') && !statusLower.includes('sold');
             });
         } else if (currentPartFilter === 'sold') {
-            // Проверява за продадени части
             filtered = globalParts.filter(p => {
                 if (!p.status) return false;
                 const statusLower = p.status.toString().toLowerCase().trim();
-                return statusLower === 'продадено' || statusLower === 'продадена' || statusLower === 'sold';
+                return statusLower.includes('продад') || statusLower.includes('sold');
             });
         }
     
@@ -763,16 +767,14 @@
             return;
         }
     
-        // Генериране на карти за всяка част
         filtered.forEach(p => {
-            const isSold = p.status && (p.status.toString().toLowerCase().includes('продад'));
+            const isSold = p.status && p.status.toString().toLowerCase().includes('продад');
             const photo = (p.photo_urls && p.photo_urls.length > 0) ? p.photo_urls[0] : defaultImg;
             
             const badge = isSold 
                 ? `<span class="badge bg-danger">Продадено (${(p.sold_price || 0).toFixed(2)} лв.)</span>`
                 : `<span class="badge bg-success">Наличен (${(p.price || 0).toFixed(2)} лв.)</span>`;
     
-            // Бутон за действие: ако е продадено -> Върни, ако е налично -> Продай
             const actionButton = isSold
                 ? `<button class="btn btn-sm btn-outline-warning" onclick="returnPart(${p.id})" title="Върни в наличност">↩️ Върни</button>`
                 : `<button class="btn btn-sm btn-success" onclick="openQuickSellPartModal(${p.id})">🛒 Продай</button>`;
