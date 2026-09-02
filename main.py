@@ -294,19 +294,19 @@ async def ai_analyze(req: AiAnalyzeRequest):
     try:
         import requests
 
-        # 1. Смъкване на снимката от Cloudinary
-        img_res = requests.get(req.photo_url, timeout=12)
+        # 1. Изтегляне на снимката от Cloudinary
+        img_res = requests.get(req.photo_url, timeout=10)
         if img_res.status_code != 200:
             raise HTTPException(status_code=400, detail="Снимката не може да бъде изтеглена от Cloudinary.")
 
-        image_bytes = img_res.content
+        image_b64 = base64.b64encode(img_res.content).decode("utf-8")
         mime_type = img_res.headers.get("Content-Type", "image/jpeg")
 
         # 2. Подготовка на промпта
         if req.type == "car":
             prompt = """
-            Анализирай това изображение на автомобил и върни САМО валиден JSON обект без никакъв друг текст или markdown.
-            Структура:
+            Анализирай това изображение на автомобил и върни САМО валиден JSON обект без markdown обвивки.
+            JSON структура:
             {
                 "make": "Марка",
                 "model": "Модел",
@@ -317,8 +317,8 @@ async def ai_analyze(req: AiAnalyzeRequest):
             """
         else:
             prompt = """
-            Анализирай това изображение на авточаст и върни САМО валиден JSON обект без никакъв друг текст или markdown.
-            Структура:
+            Анализирай това изображение на авточаст и върни САМО валиден JSON обект без markdown обвивки.
+            JSON структура:
             {
                 "title": "Име на частта",
                 "make": "Марка",
@@ -328,41 +328,50 @@ async def ai_analyze(req: AiAnalyzeRequest):
             }
             """
 
-        # 3. Форматиране на снимката за Gemini SDK
-        image_part = {
-            "inline_data": {
-                "data": base64.b64encode(image_bytes).decode("utf-8"),
-                "mime_type": mime_type
-            }
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": prompt},
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data": image_b64
+                        }
+                    }
+                ]
+            }]
         }
 
-        # 4. Модели за опит (от най-новия към алтернативните)
-        model_names = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-flash"]
-        response = None
-        last_err = None
+        # 3. Опит с новите валидни модели за 2026 г.
+        supported_models = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash-latest"]
+        res_data = None
+        last_error_msg = ""
 
-        for m_name in model_names:
-            try:
-                model = genai.GenerativeModel(m_name)
-                response = model.generate_content([prompt, image_part])
-                if response and response.text:
-                    break
-            except Exception as e:
-                last_err = e
-                print(f"Опит с {m_name} се провали: {e}", flush=True)
+        for model_name in supported_models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+            api_res = requests.post(url, json=payload, timeout=15)
+            
+            if api_res.status_code == 200:
+                res_data = api_res.json()
+                break
+            else:
+                last_error_msg = f"Модел {model_name} върна {api_res.status_code}: {api_res.text}"
+                print(last_error_msg, flush=True)
 
-        if not response or not response.text:
-            raise last_err or Exception("Gemini AI не върна отговор.")
+        if not res_data:
+            raise Exception(f"Никой от Gemini моделите не сработи. Последна грешка: {last_error_msg}")
 
-        # 5. Изчистване на JSON отговора
-        text = response.text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1] if "\n" in text else text
-            if text.endswith("```"):
-                text = text.rsplit("```", 1)[0]
-        text = text.replace("```json", "").replace("```", "").strip()
-
-        return {"result": json.loads(text)}
+        # 4. Извличане и почистване на JSON отговора
+        raw_text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        
+        clean_text = raw_text
+        if "```json" in clean_text:
+            clean_text = clean_text.split("```json")[1].split("```")[0]
+        elif "```" in clean_text:
+            clean_text = clean_text.split("```")[1].split("```")[0]
+            
+        clean_text = clean_text.strip()
+        return {"result": json.loads(clean_text)}
 
     except Exception as e:
         print(f"AI Error Trace: {str(e)}", flush=True)
