@@ -252,24 +252,27 @@ async def upload_photos(files: List[UploadFile] = File(...)):
 
 # === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI 2.5 FLASH) ===
 # === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="Gemini API ключът не е конфигуриран в Render.")
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY не е зададен в Render Environment.")
 
     try:
         import requests
         
-        # 1. Изтегляне на снимката от Cloudinary
+        # 1. Изтегляне на изображението от Cloudinary
         img_res = requests.get(req.photo_url, timeout=10)
         if img_res.status_code != 200:
             raise HTTPException(status_code=400, detail="Снимката не може да бъде изтеглена от Cloudinary.")
 
-        image_bytes = img_res.content
+        image_data = img_res.content
         mime_type = img_res.headers.get("Content-Type", "image/jpeg")
 
-        # 2. Инициализиране на Gemini модела
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # 2. Опит с няколко имена на модели за максимална съвместимост
+        model_names = ["gemini-2.0-flash", "gemini-1.5-flash-latest", "gemini-flash"]
+        response = None
+        last_error = None
 
         if req.type == "car":
             prompt = """
@@ -296,15 +299,25 @@ async def ai_analyze(req: AiAnalyzeRequest):
             }
             """
 
-        # 3. Изпращане към Gemini
         image_part = {
             "mime_type": mime_type,
-            "data": image_bytes
+            "data": image_data
         }
 
-        response = model.generate_content([prompt, image_part])
+        # Пробваме всеки модел подред, докато един сработи
+        for m_name in model_names:
+            try:
+                model = genai.GenerativeModel(m_name)
+                response = model.generate_content([prompt, image_part])
+                if response:
+                    break
+            except Exception as err:
+                last_error = err
+                print(f"Модел {m_name} не сработи: {err}", flush=True)
 
-        # 4. Почистване на отговора от Markdown
+        if not response:
+            raise last_error or Exception("Нито един от поддържаните Gemini модели не е наличен.")
+
         text = response.text.strip()
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0]
@@ -316,7 +329,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
         return {"result": parsed_json}
 
     except Exception as e:
-        print(f"AI Error Trace: {str(e)}")
+        print(f"AI Error Trace: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=f"Грешка AI Анализ: {str(e)}")
 
 # === 6. ФИНАНСОВИ РЕЗУЛТАТИ ===
