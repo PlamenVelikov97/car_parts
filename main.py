@@ -323,11 +323,11 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ (КОРИГИРАН GEMINI МОДЕЛ) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (ДИРЕКТНА REST ЗАЯВКА - БЕЗ GOOGLE БИБЛИОТЕКИ) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY липсва в сървърната среда.")
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY липсва в Render Environment.")
 
     try:
         # 1. Изтегляне на снимката от Cloudinary
@@ -341,43 +341,64 @@ async def ai_analyze(req: AiAnalyzeRequest):
             if "image" not in mime_type:
                 mime_type = "image/jpeg"
 
-        # 2. Подготовка на промпта
-        if req.type == "car":
-            prompt = (
-                "Анализирай това изображение на автомобил и върни САМО валиден JSON обект "
-                "със следните полета: "
-                "'make' (Марка), 'model' (Модел), 'year' (Година като число или null), "
-                "'engine' (Двигател), 'fuel_type' (Дизел/Бензин/Хибрид/Електрически)."
-            )
-        else:
-            prompt = (
-                "Анализирай това изображение на авточаст и върни САМО валиден JSON обект "
-                "със следните полета: "
-                "'title' (Име на частта), 'make' (Марка), 'model' (Модел), "
-                "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
-            )
+            # Кодиране на снимката в base64 за директния API апел
+            base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
-        # 3. Ползваме стабилното име gemini-1.5-flash
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        
-        image_part = {
-            "mime_type": mime_type,
-            "data": image_bytes
-        }
+            # 2. Подготовка на промпта
+            if req.type == "car":
+                prompt_text = (
+                    "Анализирай това изображение на автомобил и върни САМО валиден JSON обект "
+                    "без markdown форматиране със следните полета: "
+                    "'make' (Марка), 'model' (Модел), 'year' (Година като число или null), "
+                    "'engine' (Двигател), 'fuel_type' (Дизел/Бензин/Хибрид/Електрически)."
+                )
+            else:
+                prompt_text = (
+                    "Анализирай това изображение на авточаст и върни САМО валиден JSON обект "
+                    "без markdown форматиране със следните полета: "
+                    "'title' (Име на частта), 'make' (Марка), 'model' (Модел), "
+                    "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
+                )
 
-        # Изпълнение
-        response = model.generate_content([prompt, image_part])
+            # 3. Директно извикване на Google REST API (v1beta ендпоинт за gemini-1.5-flash)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+            
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt_text},
+                            {
+                                "inline_data": {
+                                    "mime_type": mime_type,
+                                    "data": base64_image
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "response_mime_type": "application/json",
+                    "temperature": 0.1
+                }
+            }
 
-        raw_text = response.text.strip()
-        
-        # Почистване на markdown капсулиране (```json ...)
-        if raw_text.startswith("```"):
-            raw_text = raw_text.split("\n", 1)[1]
-            if raw_text.endswith("```"):
-                raw_text = raw_text.rsplit("\n", 1)[0]
-            raw_text = raw_text.replace("json", "").strip()
+            api_res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
+            
+            if api_res.status_code != 200:
+                raise HTTPException(status_code=api_res.status_code, detail=f"Google API Грешка: {api_res.text}")
 
-        return {"result": json.loads(raw_text)}
+            res_data = api_res.json()
+            raw_text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+            # Почистване на евентуални markdown тагове
+            if raw_text.startswith("```"):
+                raw_text = raw_text.split("\n", 1)[1]
+                if raw_text.endswith("```"):
+                    raw_text = raw_text.rsplit("\n", 1)[0]
+                raw_text = raw_text.replace("json", "").strip()
+
+            return {"result": json.loads(raw_text)}
 
     except Exception as e:
         print(f"AI Error Trace: {str(e)}", flush=True)
