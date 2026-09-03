@@ -1,6 +1,10 @@
 import os
 import json
+import base64
+import httpx
 from typing import List, Optional
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -9,9 +13,6 @@ from supabase import create_client, Client
 import cloudinary
 import cloudinary.uploader
 import google.generativeai as genai
-from pathlib import Path
-import base64
-import httpx
 
 # === ИНИЦИАЛИЗАЦИЯ НА FASTAPI И JINJA2 ===
 app = FastAPI(title="Автоморга Мениджър")
@@ -24,6 +25,9 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "")
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+# Модел на Gemini за бърз анализ
+GEMINI_MODEL = "gemini-2.0-flash"
 
 # Свързване с Supabase
 supabase: Optional[Client] = None
@@ -86,7 +90,7 @@ class PartUpdate(BaseModel):
     oem_number: Optional[str] = None
     price: Optional[float] = None
     sold_price: Optional[float] = None   # Задължително за връщане/продажба
-    status: Optional[str] = None       # Задължително за промяна на статус
+    status: Optional[str] = None        # Задължително за промяна на статус
     warehouse_id: Optional[int] = None
     car_id: Optional[int] = None
     notes: Optional[str] = None
@@ -162,14 +166,12 @@ def get_cars_summary():
 
         result = []
         for car in cars:
-            # Намираме частта безопасно
             car_parts = [p for p in parts if p and p.get("car_id") == car.get("id")]
             
-            # Изчисляваме сумата от продадените части
             sold_parts_sum = sum(
                 float(p.get("sold_price") or 0.0) 
                 for p in car_parts 
-                if p.get("status") == "Продадено"
+                if p.get("status") and "продад" in str(p.get("status")).lower()
             )
             
             scrap_price = float(car.get("scrap_price") or 0.0)
@@ -184,7 +186,6 @@ def get_cars_summary():
             car_data["total_sales"] = total_sales
             car_data["net_profit"] = net_profit
             
-            # Решение за липсващ title
             make = car.get("make") or ""
             model = car.get("model") or ""
             car_data["title"] = car.get("title") or f"{make} {model}".strip() or "Без име"
@@ -201,12 +202,7 @@ def create_car(car: CarCreate):
     check_db()
     try:
         car_data = car.model_dump() if hasattr(car, "model_dump") else car.dict()
-        
-        # Генерираме задължителното поле 'title' за Supabase
         car_data["title"] = f"{car.make} {car.model}".strip()
-        
-        # Премахваме 'status', ако не си добавил колоната в Supabase
-        # car_data.pop("status", None) 
         
         res = supabase.table("cars").insert(car_data).execute()
         return res.data
@@ -223,7 +219,7 @@ def update_car(car_id: int, car: CarCreate):
         return res.data
     except Exception as e:
         print(f"Error updating car: {str(e)}", flush=True)
-        raise HTTPException(status_code=500, detail=f"Грешка при дублиране/редакция: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Грешка при редакция на кола: {str(e)}")
 
 @app.put("/cars/{car_id}/scrap")
 def scrap_car(car_id: int, scrap: CarScrap):
@@ -266,8 +262,6 @@ def create_part(part: PartCreate):
     check_db()
     try:
         part_data = part.model_dump() if hasattr(part, "model_dump") else part.dict()
-        
-        # Ако не е подаден конкретен статус, тогава е "Наличен"
         if not part_data.get("status"):
             part_data["status"] = "Наличен"
             
@@ -281,9 +275,7 @@ def create_part(part: PartCreate):
 def update_part(part_id: int, part: PartUpdate):
     check_db()
     try:
-        # Вземаме само изпратените стойности (игнорира липсващите)
         update_data = part.model_dump(exclude_unset=True) if hasattr(part, "model_dump") else part.dict(exclude_unset=True)
-        
         if not update_data:
             raise HTTPException(status_code=400, detail="Няма предоставени данни за промяна.")
 
@@ -291,7 +283,7 @@ def update_part(part_id: int, part: PartUpdate):
         return res.data
     except Exception as e:
         print(f"Error updating part {part_id}: {str(e)}", flush=True)
-        raise HTTPException(status_code=500, detail=f"Грешка при дублиране/обновяване: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Грешка при обновяване на част: {str(e)}")
 
 @app.put("/parts/{part_id}/sell")
 def sell_part(part_id: int, sell: PartSell):
@@ -316,14 +308,14 @@ def delete_part(part_id: int):
 
 # === 4. КАЧВАНЕ НА СНИМКИ (CLOUDINARY) ===
 @app.post("/upload-photos")
-async def upload_photos(files: List[UploadFile] = File(...)):
+def upload_photos(files: List[UploadFile] = File(...)):
     if not (CLOUDINARY_URL or CLOUDINARY_CLOUD_NAME):
         raise HTTPException(status_code=500, detail="Cloudinary не е конфигуриран на сървъра.")
 
     uploaded_urls = []
     for file in files:
         try:
-            content = await file.read()
+            content = file.file.read()
             res = cloudinary.uploader.upload(content)
             if "secure_url" in res:
                 uploaded_urls.append(res["secure_url"])
@@ -334,9 +326,7 @@ async def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ ===
 # === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI AI) ===
-@app.post("/ai-analyze")
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
@@ -385,7 +375,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 }
             }
 
-            # 4. Директна заявка към бързия модел с таймаут от 8 секунди
+            # 4. Заявка към бързия модел gemini-2.0-flash
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
             
             try:
