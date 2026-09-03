@@ -27,7 +27,7 @@ CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Модел на Gemini за бърз анализ
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.6-flash"
 
 # Свързване с Supabase
 supabase: Optional[Client] = None
