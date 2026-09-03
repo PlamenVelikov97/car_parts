@@ -86,8 +86,8 @@ class PartUpdate(BaseModel):
     year: Optional[int] = None
     oem_number: Optional[str] = None
     price: Optional[float] = None
-    sold_price: Optional[float] = None   # Задължително за връщане/продажба
-    status: Optional[str] = None        # Задължително за промяна на статус
+    sold_price: Optional[float] = None
+    status: Optional[str] = None
     warehouse_id: Optional[int] = None
     car_id: Optional[int] = None
     notes: Optional[str] = None
@@ -323,59 +323,54 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (КОРИГИРАН GEMINI МОДЕЛ) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY липсва в Render Environment.")
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY липсва в сървърната среда.")
 
     try:
         # 1. Изтегляне на снимката от Cloudinary
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             img_res = await client.get(req.photo_url)
             if img_res.status_code != 200:
                 raise HTTPException(status_code=400, detail="Снимката не може да бъде изтеглена от Cloudinary.")
 
             image_bytes = img_res.content
             mime_type = img_res.headers.get("Content-Type", "image/jpeg")
+            if "image" not in mime_type:
+                mime_type = "image/jpeg"
 
         # 2. Подготовка на промпта
         if req.type == "car":
             prompt = (
                 "Анализирай това изображение на автомобил и върни САМО валиден JSON обект "
-                "без markdown форматиране със следните полета: "
+                "със следните полета: "
                 "'make' (Марка), 'model' (Модел), 'year' (Година като число или null), "
                 "'engine' (Двигател), 'fuel_type' (Дизел/Бензин/Хибрид/Електрически)."
             )
         else:
             prompt = (
                 "Анализирай това изображение на авточаст и върни САМО валиден JSON обект "
-                "без markdown форматиране със следните полета: "
+                "със следните полета: "
                 "'title' (Име на частта), 'make' (Марка), 'model' (Модел), "
                 "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
             )
 
-        # 3. Ползваме 'gemini-1.5-flash-latest' или 'gemini-2.0-flash'
-        # Когато се ползва genai.GenerativeModel, НЕ се слага 'models/' отпред
-        model = genai.GenerativeModel("gemini-1.5-flash-latest")
+        # 3. Ползваме стабилното име gemini-1.5-flash
+        model = genai.GenerativeModel("gemini-1.5-flash")
         
         image_part = {
             "mime_type": mime_type,
             "data": image_bytes
         }
 
-        # Изпълнение с изрично указание за JSON формат
-        response = model.generate_content(
-            [prompt, image_part],
-            generation_config={
-                "temperature": 0.1,
-                "response_mime_type": "application/json"
-            }
-        )
+        # Изпълнение
+        response = model.generate_content([prompt, image_part])
 
         raw_text = response.text.strip()
         
-        # Почистване на евентуално markdown капсулиране (```json ...)
+        # Почистване на markdown капсулиране (```json ...)
         if raw_text.startswith("```"):
             raw_text = raw_text.split("\n", 1)[1]
             if raw_text.endswith("```"):
