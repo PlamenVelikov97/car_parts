@@ -324,6 +324,7 @@ def upload_photos(files: List[UploadFile] = File(...)):
 
 
 # === 5. AI АНАЛИЗ НА СНИМКИ (ОФИЦИАЛЕН GEMINI SDK) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
@@ -355,24 +356,29 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
             )
 
-        # 3. Ползваме стабилния Gemini 1.5 Flash през SDK
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        # 3. Използване на models/gemini-1.5-flash
+        model = genai.GenerativeModel("models/gemini-1.5-flash")
         
         image_part = {
             "mime_type": mime_type,
             "data": image_bytes
         }
 
-        # Изпълнение на заявката през SDK
+        # Изпълнение
         response = model.generate_content(
             [prompt, image_part],
-            generation_config={
-                "response_mime_type": "application/json",
-                "temperature": 0.1
-            }
+            generation_config={"temperature": 0.1}
         )
 
         raw_text = response.text.strip()
+        
+        # Изчистване на евентуални markdown тагове (```json ... ```)
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("\n", 1)[1]
+            if raw_text.endswith("```"):
+                raw_text = raw_text.rsplit("\n", 1)[0]
+            raw_text = raw_text.replace("json", "").strip()
+
         return {"result": json.loads(raw_text)}
 
     except Exception as e:
