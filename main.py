@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 import cloudinary
 import cloudinary.uploader
-import google.generativeai as genai
 
 # === ИНИЦИАЛИЗАЦИЯ НА FASTAPI И JINJA2 ===
 app = FastAPI(title="Автоморга Мениджър")
@@ -40,10 +39,6 @@ elif CLOUDINARY_CLOUD_NAME:
         api_key=os.getenv("CLOUDINARY_API_KEY", ""),
         api_secret=os.getenv("CLOUDINARY_API_SECRET", "")
     )
-
-# Свързване с Gemini AI
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
 
 
 # === PYDANTIC МОДЕЛИ ===
@@ -99,9 +94,6 @@ class PartSell(BaseModel):
 class AiAnalyzeRequest(BaseModel):
     photo_url: str
     type: str  # 'car' или 'part'
-
-class AIImageRequest(BaseModel):
-    image_base64: str
 
 
 # === ВЕРИФИКАЦИЯ НА SUPABASE ===
@@ -323,7 +315,7 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ (ДИРЕКТНА REST ЗАЯВКА - БЕЗ GOOGLE БИБЛИОТЕКИ) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (ПРАВА REST ЗАЯВКА КЪМ GEMINI) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
@@ -341,7 +333,6 @@ async def ai_analyze(req: AiAnalyzeRequest):
             if "image" not in mime_type:
                 mime_type = "image/jpeg"
 
-            # Кодиране на снимката в base64 за директния API апел
             base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
             # 2. Подготовка на промпта
@@ -360,7 +351,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
                     "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
                 )
 
-            # 3. Директно извикване на Google REST API (v1beta ендпоинт за gemini-1.5-flash)
+            # 3. Директна заявка през HTTP
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
             
             payload = {
@@ -391,7 +382,6 @@ async def ai_analyze(req: AiAnalyzeRequest):
             res_data = api_res.json()
             raw_text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-            # Почистване на евентуални markdown тагове
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[1]
                 if raw_text.endswith("```"):
