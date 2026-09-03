@@ -323,7 +323,6 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ (ОФИЦИАЛЕН GEMINI SDK) ===
 # === 5. AI АНАЛИЗ НА СНИМКИ ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
@@ -356,7 +355,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
             )
 
-        # 3. Използване на models/gemini-1.5-flash
+        # 3. Използване на пълния път до модела
         model = genai.GenerativeModel("models/gemini-1.5-flash")
         
         image_part = {
@@ -372,7 +371,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
 
         raw_text = response.text.strip()
         
-        # Изчистване на евентуални markdown тагове (```json ... ```)
+        # Премахване на markdown форматиране (```json ... ```) ако моделът го върне
         if raw_text.startswith("```"):
             raw_text = raw_text.split("\n", 1)[1]
             if raw_text.endswith("```"):
