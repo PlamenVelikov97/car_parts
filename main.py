@@ -27,7 +27,7 @@ CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Модел на Gemini за бърз анализ
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 # Свързване с Supabase
 supabase: Optional[Client] = None
@@ -375,7 +375,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 }
             }
 
-            # 4. Заявка към бързия модел gemini-2.0-flash
+            # 4. Заявка към бързия модел .0-flash
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
             
             try:
