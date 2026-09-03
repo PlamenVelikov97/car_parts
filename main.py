@@ -315,7 +315,7 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ (ПРАВА REST ЗАЯВКА КЪМ GEMINI V1) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (ПРАВА REST ЗАЯВКА КЪМ GEMINI 3.6 FLASH) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
@@ -351,8 +351,8 @@ async def ai_analyze(req: AiAnalyzeRequest):
                     "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
                 )
 
-            # 3. Директна заявка през стабилната v1 версия с актуален gemini-2.5-flash
-            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+            # 3. Директна заявка с gemini-3.6-flash
+            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
             
             payload = {
                 "contents": [
