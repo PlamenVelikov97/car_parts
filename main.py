@@ -355,23 +355,27 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
             )
 
-        # 3. Използване на пълния път до модела
-        model = genai.GenerativeModel("models/gemini-1.5-flash")
+        # 3. Ползваме 'gemini-1.5-flash-latest' или 'gemini-2.0-flash'
+        # Когато се ползва genai.GenerativeModel, НЕ се слага 'models/' отпред
+        model = genai.GenerativeModel("gemini-1.5-flash-latest")
         
         image_part = {
             "mime_type": mime_type,
             "data": image_bytes
         }
 
-        # Изпълнение
+        # Изпълнение с изрично указание за JSON формат
         response = model.generate_content(
             [prompt, image_part],
-            generation_config={"temperature": 0.1}
+            generation_config={
+                "temperature": 0.1,
+                "response_mime_type": "application/json"
+            }
         )
 
         raw_text = response.text.strip()
         
-        # Премахване на markdown форматиране (```json ... ```) ако моделът го върне
+        # Почистване на евентуално markdown капсулиране (```json ...)
         if raw_text.startswith("```"):
             raw_text = raw_text.split("\n", 1)[1]
             if raw_text.endswith("```"):
