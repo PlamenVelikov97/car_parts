@@ -26,9 +26,6 @@ CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "")
 CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
-# Модел на Gemini за бърз анализ
-GEMINI_MODEL = "gemini-3.6-flash"
-
 # Свързване с Supabase
 supabase: Optional[Client] = None
 if SUPABASE_URL and SUPABASE_KEY:
@@ -326,72 +323,57 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ (GEMINI AI) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (ОФИЦИАЛЕН GEMINI SDK) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY липсва в Render Environment.")
 
     try:
-        # 1. Изтегляне на снимката с асинхронен httpx
+        # 1. Изтегляне на снимката от Cloudinary
         async with httpx.AsyncClient(timeout=10.0) as client:
             img_res = await client.get(req.photo_url)
             if img_res.status_code != 200:
                 raise HTTPException(status_code=400, detail="Снимката не може да бъде изтеглена от Cloudinary.")
 
-            image_b64 = base64.b64encode(img_res.content).decode("utf-8")
+            image_bytes = img_res.content
             mime_type = img_res.headers.get("Content-Type", "image/jpeg")
 
-            # 2. Подготовка на промпта според типа
-            if req.type == "car":
-                prompt = (
-                    "Анализирай това изображение на автомобил и върни JSON със следните полета: "
-                    "'make' (Марка), 'model' (Модел), 'year' (Година като число или null), "
-                    "'engine' (Двигател), 'fuel_type' (Дизел/Бензин/Хибрид/Електрически)."
-                )
-            else:
-                prompt = (
-                    "Анализирай това изображение на авточаст и върни JSON със следните полета: "
-                    "'title' (Име на частта), 'make' (Марка), 'model' (Модел), "
-                    "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
-                )
+        # 2. Подготовка на промпта
+        if req.type == "car":
+            prompt = (
+                "Анализирай това изображение на автомобил и върни САМО валиден JSON обект "
+                "без markdown форматиране със следните полета: "
+                "'make' (Марка), 'model' (Модел), 'year' (Година като число или null), "
+                "'engine' (Двигател), 'fuel_type' (Дизел/Бензин/Хибрид/Електрически)."
+            )
+        else:
+            prompt = (
+                "Анализирай това изображение на авточаст и върни САМО валиден JSON обект "
+                "без markdown форматиране със следните полета: "
+                "'title' (Име на частта), 'make' (Марка), 'model' (Модел), "
+                "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
+            )
 
-            # 3. Payload с форсиране на JSON формат
-            payload = {
-                "contents": [{
-                    "parts": [
-                        {"text": prompt},
-                        {
-                            "inline_data": {
-                                "mime_type": mime_type,
-                                "data": image_b64
-                            }
-                        }
-                    ]
-                }],
-                "generationConfig": {
-                    "response_mime_type": "application/json",
-                    "temperature": 0.1
-                }
+        # 3. Ползваме стабилния Gemini 1.5 Flash през SDK
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        image_part = {
+            "mime_type": mime_type,
+            "data": image_bytes
+        }
+
+        # Изпълнение на заявката през SDK
+        response = model.generate_content(
+            [prompt, image_part],
+            generation_config={
+                "response_mime_type": "application/json",
+                "temperature": 0.1
             }
+        )
 
-            # 4. Заявка към бързия модел .0-flash
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-            
-            try:
-                api_res = await client.post(url, json=payload, timeout=8.0)
-                if api_res.status_code != 200:
-                    raise Exception(f"API върна статус код {api_res.status_code}: {api_res.text}")
-                
-                res_data = api_res.json()
-                raw_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
-                return {"result": json.loads(raw_text)}
-
-            except httpx.TimeoutException:
-                raise HTTPException(
-                    status_code=504, 
-                    detail="AI моделът не отговори в рамките на 8 секунди. Снимката може да е твърде голяма."
-                )
+        raw_text = response.text.strip()
+        return {"result": json.loads(raw_text)}
 
     except Exception as e:
         print(f"AI Error Trace: {str(e)}", flush=True)
