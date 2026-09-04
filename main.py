@@ -430,44 +430,21 @@ async def ai_analyze(req: AiAnalyzeRequest):
 
 # === 6. ФИНАНСОВИ РЕЗУЛТАТИ С ФИЛТЪР ПО ДАТИ ===
 @app.get("/reports/financials")
-def get_financials(
-    start_date: Optional[str] = Query(None),
-    end_date: Optional[str] = Query(None)
-):
-    check_db()
-    
-    # 1. Покупки на коли за периода
-    cars_query = supabase.table("cars").select("purchase_price, scrap_price, status, created_at, scrapped_at")
-    if start_date:
-        cars_query = cars_query.gte("created_at", f"{start_date}T00:00:00")
-    if end_date:
-        cars_query = cars_query.lte("created_at", f"{end_date}T23:59:59")
-    cars = cars_query.execute().data or []
-
-    # 2. Продажби на части за периода
-    parts_query = supabase.table("parts").select("price, sold_price, status, created_at, sold_at").eq("status", "Продадено")
-    if start_date:
-        parts_query = parts_query.gte("sold_at", f"{start_date}T00:00:00")
-    if end_date:
-        parts_query = parts_query.lte("sold_at", f"{end_date}T23:59:59")
-    parts = parts_query.execute().data or []
-
-    # 3. Изчисление на финансовите суми
-    total_car_investment = sum(float(c.get("purchase_price") or 0.0) for c in cars)
-    total_parts_sales = sum(float(p.get("sold_price") or 0.0) for p in parts)
-    total_scrap_sales = sum(float(c.get("scrap_price") or 0.0) for c in cars if c.get("status") == "Скрап")
-    
-    total_income = total_parts_sales + total_scrap_sales
-    net_profit = total_income - total_car_investment
-
-    return {
-        "start_date": start_date,
-        "end_date": end_date,
-        "total_car_investment": total_car_investment,
-        "total_parts_sales": total_parts_sales,
-        "total_scrap_sales": total_scrap_sales,
-        "total_income": total_income,
-        "net_profit": net_profit,
-        "cars_count": len(cars),
-        "parts_sold_count": len(parts)
-    }
+def get_financials():
+    try:
+        # Проверка на базата данни (ако функцията хвърля грешка, я хващаме в except)
+        if callable(globals().get("check_db")):
+            check_db()
+            
+        cars_res = supabase.table("cars").select("purchase_price, scrap_price, status").execute()
+        parts_res = supabase.table("parts").select("price, sold_price, status").execute()
+        
+        cars = cars_res.data if cars_res and cars_res.data else []
+        parts = parts_res.data if parts_res and parts_res.data else []
+        
+        return {"cars": cars, "parts": parts}
+        
+    except Exception as e:
+        print(f"Грешка във финансовия отчет: {e}")
+        # Връщаме празни масиви, за да не гърми фронтенда с 500 Internal Server Error
+        return {"cars": [], "parts": []}
