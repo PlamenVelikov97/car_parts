@@ -152,13 +152,26 @@ def get_cars():
 
 @app.get("/cars/summary")
 def get_cars_summary():
-    # Заявка към Supabase / PostgreSQL
-    # Извличаме колите заедно с общата сума на продадените им части
-    response = supabase.rpc("get_cars_with_sales").execute() 
-    # Или обикновена заявка, ако нямате RPC функция:
-    # response = supabase.table("cars").select("*, parts(sold_price)").execute()
+    # Взимаме колите + името на склада чрез Supabase Join Syntax
+    response = supabase.table("cars").select("*, warehouses(id, name), parts(sold_price, status)").execute()
+    cars = response.data
     
-    return response.data  # Задължително трябва да върне масив: [...]
+    # Форматираме резултата, за да може JS да го чете лесно
+    result = []
+    for car in cars:
+        # Изчисляваме общите продажби на части за тази кола
+        parts = car.get("parts", [])
+        total_parts_sold = sum(
+            float(p.get("sold_price") or 0) 
+            for p in parts 
+            if p.get("status") and "продад" in p.get("status").lower()
+        )
+        
+        car_data = dict(car)
+        car_data["total_parts_sold"] = total_parts_sold
+        result.append(car_data)
+        
+    return result
 
 @app.post("/cars")
 def create_car(car: CarCreate):
