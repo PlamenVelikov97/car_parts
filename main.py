@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 import cloudinary
 import cloudinary.uploader
+import google.generativeai as genai
 
 # === ИНИЦИАЛИЗАЦИЯ НА FASTAPI И JINJA2 ===
 app = FastAPI(title="Автоморга Мениджър")
@@ -315,7 +316,7 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ (С РАБОТЕЩ GEMINI 1.5 FLASH МОДЕЛ) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (ОФИЦИАЛНА GOOGLE БИБЛИОТЕКА) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -338,8 +339,6 @@ async def ai_analyze(req: AiAnalyzeRequest):
             if "image" not in mime_type:
                 mime_type = "image/jpeg"
 
-            base64_image = base64.b64encode(image_bytes).decode("utf-8")
-
         # 2. Подготовка на промпта
         if req.type == "car":
             prompt_text = (
@@ -356,66 +355,40 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
             )
 
-        # 3. Валиден URL с поддържан модел (gemini-1.5-flash)
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+        # 3. Конфигуриране на Google SDK
+        genai.configure(api_key=api_key)
         
-        # 4. JSON Payload с правилните CamelCase ключове (inlineData и mimeType)
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": prompt_text},
-                        {
-                            "inlineData": {
-                                "mimeType": mime_type,
-                                "data": base64_image
-                            }
-                        }
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "responseMimeType": "application/json"
-            }
+        # Използване на официалния клиент
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            generation_config={"response_mime_type": "application/json"}
+        )
+
+        image_part = {
+            "mime_type": mime_type,
+            "data": image_bytes
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            api_res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
-            
-            if api_res.status_code != 200:
-                print(f"Google REST Error ({api_res.status_code}): {api_res.text}", flush=True)
-                raise HTTPException(
-                    status_code=api_res.status_code, 
-                    detail=f"Грешка от Google API ({api_res.status_code}): {api_res.text}"
-                )
+        # 4. Генериране на отговора
+        response = model.generate_content([prompt_text, image_part])
+        raw_text = response.text.strip()
 
-            res_data = api_res.json()
+        # Почистване от евентуални остатъчни markdown тагове
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("\n", 1)[1]
+            if raw_text.endswith("```"):
+                raw_text = raw_text.rsplit("\n", 1)[0]
+            raw_text = raw_text.replace("json", "").strip()
 
-            # Извличане на отговора
-            raw_text = ""
-            try:
-                raw_text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            except (KeyError, IndexError):
-                print(f"Invalid Google API response structure: {res_data}", flush=True)
-                raise HTTPException(status_code=500, detail="Неочакван формат в отговора от Google API.")
-
-            # Почистване от markdown тагове
-            if raw_text.startswith("```"):
-                raw_text = raw_text.split("\n", 1)[1]
-                if raw_text.endswith("```"):
-                    raw_text = raw_text.rsplit("\n", 1)[0]
-                raw_text = raw_text.replace("json", "").strip()
-
-            return {"result": json.loads(raw_text)}
+        return {"result": json.loads(raw_text)}
 
     except json.JSONDecodeError:
-        print(f"JSON Parsing Error. Raw text from AI was: {raw_text}", flush=True)
+        print(f"JSON Parsing Error. Raw text was: {raw_text}", flush=True)
         raise HTTPException(status_code=500, detail="AI върна текст, който не може да бъде разпознат като JSON.")
     except Exception as e:
         print(f"Unhandled Exception in /ai-analyze: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=f"Грешка AI Анализ: {str(e)}")
-
-
+        
 # === 6. ФИНАНСОВИ РЕЗУЛТАТИ ===
 @app.get("/reports/financials")
 def get_financials():
