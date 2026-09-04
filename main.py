@@ -151,24 +151,36 @@ def get_cars():
     return res.data
 
 @app.get("/cars/summary")
+@app.get("/cars/summary")
 def get_cars_summary():
-    # Взимаме колите + името на склада чрез Supabase Join Syntax
-    response = supabase.table("cars").select("*, warehouses(id, name), parts(sold_price, status)").execute()
+    # 1. Добавихме id и title (или parts(*)), за да върне цялата информация за частите
+    response = supabase.table("cars").select("*, warehouses(id, name), parts(*)").execute()
     cars = response.data
     
-    # Форматираме резултата, за да може JS да го чете лесно
     result = []
     for car in cars:
-        # Изчисляваме общите продажби на части за тази кола
-        parts = car.get("parts", [])
+        parts = car.get("parts") or []
+        
+        # 2. Изчисляваме общите приходи от продадени части
         total_parts_sold = sum(
             float(p.get("sold_price") or 0) 
             for p in parts 
             if p.get("status") and "продад" in p.get("status").lower()
         )
         
+        # Добавяме и цената от скрап, ако има такава
+        scrap_price = float(car.get("scrap_price") or 0)
+        total_sales = total_parts_sold + scrap_price
+        
+        purchase_price = float(car.get("purchase_price") or 0)
+        net_profit = total_sales - purchase_price
+        
         car_data = dict(car)
+        # 3. Записваме exact полетата, които JavaScript очаква
         car_data["total_parts_sold"] = total_parts_sold
+        car_data["total_sales"] = total_sales
+        car_data["net_profit"] = net_profit
+        
         result.append(car_data)
         
     return result
