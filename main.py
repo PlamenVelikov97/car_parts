@@ -315,7 +315,7 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ (АКТУАЛИЗИРАН КЪМ GEMINI 3.6 FLASH) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (ОФИЦИАЛЕН GEMINI 2.5 FLASH ПРАВИЛЕН REST) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -356,18 +356,18 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
             )
 
-        # 3. Актуален URL адрес кьм Gemini 3.6 Flash
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
+        # 3. Официален поддържан модел
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
         
-        # 4. REST payload с правилните CamelCase ключове (inlineData и mimeType)
+        # 4. JSON Payload с валидни CamelCase ключове според Google OpenAPI спецификацията
         payload = {
             "contents": [
                 {
                     "parts": [
                         {"text": prompt_text},
                         {
-                            "inlineData": {
-                                "mimeType": mime_type,
+                            "inlineData": {            # Важно: CamelCase
+                                "mimeType": mime_type, # Важно: CamelCase
                                 "data": base64_image
                             }
                         }
@@ -398,7 +398,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 print(f"Invalid Google API response structure: {res_data}", flush=True)
                 raise HTTPException(status_code=500, detail="Неочакван формат в отговора от Google API.")
 
-            # Изчистване на евентуални Markdown тагове (```json ... ```)
+            # Почистване от markdown тагове
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[1]
                 if raw_text.endswith("```"):
