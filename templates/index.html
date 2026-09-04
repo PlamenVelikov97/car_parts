@@ -707,7 +707,6 @@
     }
 
     // --- 3. АВТОЧАСТИ ---
-    // 1. Зареждане на частите от сървъра
     async function loadParts() {
         try {
             const res = await fetch("/parts/search");
@@ -719,29 +718,26 @@
             console.error("loadParts error:", err);
         }
     }
-    
-    // 2. Превключване на филтрите
+
     function filterParts(filterType) {
         currentPartFilter = filterType;
-    
-        // Смяна на активния бутон визуално
+
         document.querySelectorAll('#partsFilterGroup .btn').forEach(btn => btn.classList.remove('active'));
         if (filterType === 'all') document.getElementById('part-filter-all').classList.add('active');
         if (filterType === 'active') document.getElementById('part-filter-active').classList.add('active');
         if (filterType === 'sold') document.getElementById('part-filter-sold').classList.add('active');
-    
+
         renderParts();
     }
-    
-    // 3. Изчертаване на частите според филтъра
+
     function renderParts() {
         const container = document.getElementById('partsContainer');
         if (!container) return;
-    
+
         container.innerHTML = '';
-    
+
         let filtered = globalParts || [];
-    
+
         if (currentPartFilter === 'active') {
             filtered = globalParts.filter(p => {
                 if (!p.status) return true;
@@ -755,12 +751,12 @@
                 return statusLower.includes('продад') || statusLower.includes('sold');
             });
         }
-    
+
         if (filtered.length === 0) {
             container.innerHTML = '<div class="col-12 text-center text-muted py-4"><h5>Няма намерени части</h5></div>';
             return;
         }
-    
+
         filtered.forEach(p => {
             const isSold = p.status && p.status.toString().toLowerCase().includes('продад');
             const photo = (p.photo_urls && p.photo_urls.length > 0) ? p.photo_urls[0] : defaultImg;
@@ -768,11 +764,11 @@
             const badge = isSold 
                 ? `<span class="badge bg-danger">Продадено (${(p.sold_price || 0).toFixed(2)} лв.)</span>`
                 : `<span class="badge bg-success">Налично (${(p.price || 0).toFixed(2)} лв.)</span>`;
-    
+
             const actionButton = isSold
                 ? `<button class="btn btn-sm btn-outline-warning" onclick="returnPart(${p.id})" title="Върни в наличност">↩️ Върни</button>`
-                : `<button class="btn btn-sm btn-success" onclick="openQuickSellPartModal(${p.id})">🛒 Продай</button>`;
-    
+                : `<button class="btn btn-sm btn-success" onclick="sellPart(${p.id})">🛒 Продай</button>`;
+
             container.innerHTML += `
                 <div class="col-md-4 col-lg-3 mb-3">
                     <div class="card shadow-sm h-100">
@@ -882,6 +878,29 @@
                 body: JSON.stringify({ sold_price: parseFloat(price) })
             });
             loadParts();
+        }
+    }
+
+    async function returnPart(partId) {
+        if (!confirm("Сигурни ли сте, че искате да върнете тази част в наличност? Сумата ще се рекалкулира.")) return;
+
+        try {
+            const response = await fetch(`/parts/${partId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    status: "Наличен",
+                    sold_price: 0
+                })
+            });
+
+            if (!response.ok) throw new Error("Грешка при връщане на частта.");
+
+            loadCars();
+            loadParts();
+            alert("Частта бе върната успешно в наличност!");
+        } catch (error) {
+            alert("Грешка: " + error.message);
         }
     }
 
@@ -1015,31 +1034,6 @@
 
     // Първоначално зареждане
     showTab('cars');
-    async function returnPart(partId) {
-      if (!confirm("Сигурни ли сте, че искате да върнете тази част в наличност? Сумата ще се рекалкулира.")) return;
-    
-      try {
-        // Променяме статуса обратно на "Наличен" и нулираме продажната цена
-        const response = await fetch(`/parts/${partId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            status: "Наличен",
-            sold_price: 0
-          })
-        });
-    
-        if (!response.ok) throw new Error("Грешка при връщане на частта.");
-    
-        // Рекалкулирането става автоматично при презареждане на данните
-        loadCars();
-        loadParts();
-        alert("Частта бе върната успешно в наличност!");
-      } catch (error) {
-        alert("Грешка: " + error.message);
-      }
-    }
 </script>
 </body>
 </html>
-
