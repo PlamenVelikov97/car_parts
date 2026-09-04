@@ -13,7 +13,6 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 import cloudinary
 import cloudinary.uploader
-from datetime import datetime, timezone
 
 # === ИНИЦИАЛИЗАЦИЯ НА FASTAPI И JINJA2 ===
 app = FastAPI(title="Автоморга Мениджър")
