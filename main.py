@@ -316,7 +316,7 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === AI АНАЛИЗ НА СНИМКИ (С ПОТВЪРДЕН МОДЕЛ ЗА ВАШИЯ КЛЮЧ) ===
+# === AI АНАЛИЗ НА СНИМКИ (С GEMINI 3.6 FLASH) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -357,8 +357,8 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
             )
 
-        # 3. Използваме 'gemini-2.5-flash', който е наличен за вашия ключ
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+        # 3. Ползваме новия актуален модел gemini-3.6-flash
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
         
         payload = {
             "contents": [
