@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 import cloudinary
 import cloudinary.uploader
+from datetime import datetime, timezone
 
 # === ИНИЦИАЛИЗАЦИЯ НА FASTAPI И JINJA2 ===
 app = FastAPI(title="Автоморга Мениджър")
@@ -298,14 +299,18 @@ def update_part(part_id: int, part: PartUpdate):
 
 @app.put("/parts/{part_id}/sell")
 def sell_part(part_id: int, sell: PartSell):
-    check_db()
+    if callable(globals().get("check_db")):
+        check_db()
     try:
-        sold_time = sell.sold_at or datetime.now(timezone.utc).isoformat()
+        # Използваме sold_date според схемата в Supabase
+        sold_time = sell.sold_at if hasattr(sell, 'sold_at') and sell.sold_at else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+        
         data = {
             "status": "Продадено",
-            "sold_price": sell.sold_price,
-            "sold_at": sold_time
+            "sold_price": float(sell.sold_price),
+            "sold_date": str(sold_time)  # Коригирано име на колоната
         }
+        
         res = supabase.table("parts").update(data).eq("id", part_id).execute()
         return res.data
     except Exception as e:
