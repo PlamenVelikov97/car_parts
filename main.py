@@ -315,13 +315,13 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ (КОРИГИРАН REST СИНТАКСИС) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (АКТУАЛИЗИРАН КЪМ GEMINI 3.6 FLASH) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         print("ERROR: GEMINI_API_KEY is missing!", flush=True)
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY липсва в Environment Variables.")
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY липсва в Render Environment.")
 
     try:
         # 1. Изтегляне на снимката от Cloudinary
@@ -356,17 +356,18 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
             )
 
-        # 3. REST Заявка (С коригирани CamelCase имена)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        # 3. Актуален URL адрес кьм Gemini 3.6 Flash
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
         
+        # 4. REST payload с правилните CamelCase ключове (inlineData и mimeType)
         payload = {
             "contents": [
                 {
                     "parts": [
                         {"text": prompt_text},
                         {
-                            "inlineData": {            # <--- Важно: inlineData (без долна черта)
-                                "mimeType": mime_type, # <--- Важно: mimeType (без долна черта)
+                            "inlineData": {
+                                "mimeType": mime_type,
                                 "data": base64_image
                             }
                         }
@@ -374,12 +375,11 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 }
             ],
             "generationConfig": {
-                "responseMimeType": "application/json", # <--- responseMimeType
-                "temperature": 0.1
+                "responseMimeType": "application/json"
             }
         }
 
-        async with httpx.AsyncClient(timeout=25.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             api_res = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
             
             if api_res.status_code != 200:
@@ -395,10 +395,10 @@ async def ai_analyze(req: AiAnalyzeRequest):
             try:
                 raw_text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
             except (KeyError, IndexError):
-                print(f"Invalid Google API response format: {res_data}", flush=True)
-                raise HTTPException(status_code=500, detail="Невалиден формат от Google API.")
+                print(f"Invalid Google API response structure: {res_data}", flush=True)
+                raise HTTPException(status_code=500, detail="Неочакван формат в отговора от Google API.")
 
-            # Почистване на JSON от евентуален Markdown
+            # Изчистване на евентуални Markdown тагове (```json ... ```)
             if raw_text.startswith("```"):
                 raw_text = raw_text.split("\n", 1)[1]
                 if raw_text.endswith("```"):
@@ -408,8 +408,8 @@ async def ai_analyze(req: AiAnalyzeRequest):
             return {"result": json.loads(raw_text)}
 
     except json.JSONDecodeError:
-        print(f"JSON Parsing Error. Raw text was: {raw_text}", flush=True)
-        raise HTTPException(status_code=500, detail="AI върна текст, който не може да се разпознае като JSON.")
+        print(f"JSON Parsing Error. Raw text from AI was: {raw_text}", flush=True)
+        raise HTTPException(status_code=500, detail="AI върна текст, който не може да бъде разпознат като JSON.")
     except Exception as e:
         print(f"Unhandled Exception in /ai-analyze: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=f"Грешка AI Анализ: {str(e)}")
