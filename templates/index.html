@@ -413,11 +413,25 @@
 
     // --- 2. КОЛИ-ДОНОРИ ---
     async function loadCars() {
-        await loadWarehouses();
-        const res = await fetch('/cars/summary');
-        globalCars = await res.json();
-        renderCars();
-        populateCarSelect();
+        try {
+            const res = await fetch('/cars/summary');
+            
+            if (!res.ok) {
+                console.error(`Грешка от сървъра: ${res.status}`);
+                globalCars = []; // Подаване на празен масив при грешка 500
+                renderCars();
+                return;
+            }
+    
+            const data = await res.json();
+            // Уверяваме се, че data е масив преди да я запишем
+            globalCars = Array.isArray(data) ? data : [];
+            renderCars();
+        } catch (err) {
+            console.error("loadCars error:", err);
+            globalCars = [];
+            renderCars();
+        }
     }
 
     function filterCars(status) {
