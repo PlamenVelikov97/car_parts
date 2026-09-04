@@ -315,7 +315,7 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === 5. AI АНАЛИЗ НА СНИМКИ (ОФИЦИАЛЕН GEMINI 2.5 FLASH ПРАВИЛЕН REST) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ (С РАБОТЕЩ GEMINI 1.5 FLASH МОДЕЛ) ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -356,18 +356,18 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
             )
 
-        # 3. Официален поддържан модел
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+        # 3. Валиден URL с поддържан модел (gemini-1.5-flash)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
         
-        # 4. JSON Payload с валидни CamelCase ключове според Google OpenAPI спецификацията
+        # 4. JSON Payload с правилните CamelCase ключове (inlineData и mimeType)
         payload = {
             "contents": [
                 {
                     "parts": [
                         {"text": prompt_text},
                         {
-                            "inlineData": {            # Важно: CamelCase
-                                "mimeType": mime_type, # Важно: CamelCase
+                            "inlineData": {
+                                "mimeType": mime_type,
                                 "data": base64_image
                             }
                         }
@@ -392,6 +392,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
             res_data = api_res.json()
 
             # Извличане на отговора
+            raw_text = ""
             try:
                 raw_text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
             except (KeyError, IndexError):
