@@ -151,56 +151,14 @@ def get_cars():
     return res.data
 
 @app.get("/cars/summary")
-def get_cars_summary(
-    start_date: Optional[str] = Query(None),
-    end_date: Optional[str] = Query(None)
-):
-    check_db()
-    try:
-        query = supabase.table("cars").select("*, warehouses(name)").order("created_at", desc=True)
-        if start_date:
-            query = query.gte("created_at", f"{start_date}T00:00:00")
-        if end_date:
-            query = query.lte("created_at", f"{end_date}T23:59:59")
-            
-        cars_res = query.execute()
-        cars = cars_res.data or []
-
-        parts_res = supabase.table("parts").select("id, car_id, title, status, price, sold_price, created_at, sold_at").execute()
-        parts = parts_res.data or []
-
-        result = []
-        for car in cars:
-            car_parts = [p for p in parts if p and p.get("car_id") == car.get("id")]
-            
-            sold_parts_sum = sum(
-                float(p.get("sold_price") or 0.0) 
-                for p in car_parts 
-                if p.get("status") and "продад" in str(p.get("status")).lower()
-            )
-            
-            scrap_price = float(car.get("scrap_price") or 0.0)
-            purchase = float(car.get("purchase_price") or 0.0)
-            
-            total_sales = sold_parts_sum + scrap_price
-            net_profit = total_sales - purchase
-
-            car_data = dict(car)
-            car_data["parts"] = car_parts
-            car_data["parts_count"] = len(car_parts)
-            car_data["total_sales"] = total_sales
-            car_data["net_profit"] = net_profit
-            
-            make = car.get("make") or ""
-            model = car.get("model") or ""
-            car_data["title"] = car.get("title") or f"{make} {model}".strip() or "Без име"
-            
-            result.append(car_data)
-
-        return result
-    except Exception as e:
-        print(f"Error in /cars/summary: {str(e)}", flush=True)
-        raise HTTPException(status_code=500, detail=f"Грешка при извличане на колите: {str(e)}")
+def get_cars_summary():
+    # Заявка към Supabase / PostgreSQL
+    # Извличаме колите заедно с общата сума на продадените им части
+    response = supabase.rpc("get_cars_with_sales").execute() 
+    # Или обикновена заявка, ако нямате RPC функция:
+    # response = supabase.table("cars").select("*, parts(sold_price)").execute()
+    
+    return response.data  # Задължително трябва да върне масив: [...]
 
 @app.post("/cars")
 def create_car(car: CarCreate):
