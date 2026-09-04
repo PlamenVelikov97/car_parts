@@ -444,24 +444,99 @@
     function renderCars() {
         const container = document.getElementById('carsContainer');
         if (!container) return;
+    
         container.innerHTML = '';
+    
+        if (!globalCars || globalCars.length === 0) {
+            container.innerHTML = '<div class="col-12 text-center text-muted py-4"><h5>Няма намерени коли</h5></div>';
+            return;
+        }
     
         globalCars.forEach(c => {
             const photo = (c.photo_urls && c.photo_urls.length > 0) ? c.photo_urls[0] : defaultImg;
-            // Извличаме името на склада от свързаната таблица
-            const warehouseName = c.warehouses ? c.warehouses.name : 'Няма зачислен склад';
+            
+            // Взимане на името на склада (ако има връзка към warehouses)
+            const warehouseName = c.warehouses ? c.warehouses.name : (c.warehouse_id ? `Склад #${c.warehouse_id}` : 'Няма склад');
             const purchaseDate = c.purchase_date || 'Няма дата';
     
+            // Определяне на статуса
+            const isScrapped = c.status === 'Бракувана' || c.status === 'Скрап';
+            const statusBadge = isScrapped
+                ? `<span class="badge bg-danger">Скрап (${(c.scrap_price || 0).toFixed(2)} лв.)</span>`
+                : `<span class="badge bg-success">${c.status || 'Наличен'}</span>`;
+    
+            // Генериране на списък с частите на тази кола за падащото меню
+            const carParts = (c.parts || []);
+            let partsListHtml = '';
+            
+            if (carParts.length > 0) {
+                partsListHtml = carParts.map(p => {
+                    const isSold = p.status && p.status.toLowerCase().includes('продад');
+                    const partBadge = isSold 
+                        ? `<span class="badge bg-danger">Продадена (${(p.sold_price || 0).toFixed(2)} лв.)</span>` 
+                        : `<span class="badge bg-success">Налична (${(p.price || 0).toFixed(2)} лв.)</span>`;
+                    return `<li class="list-group-item d-flex justify-content-between align-items-center py-1 small">
+                                <span>${p.title}</span>
+                                ${partBadge}
+                            </li>`;
+                }).join('');
+            } else {
+                partsListHtml = '<li class="list-group-item text-muted small py-1">Няма въведени части за тази кола</li>';
+            }
+    
             container.innerHTML += `
-                <div class="col-md-4 mb-3">
-                    <div class="card h-100 shadow-sm">
-                        <img src="${photo}" class="card-img-top" style="height: 180px; object-fit: cover;">
-                        <div class="card-body">
-                            <h5>${c.title || (c.make + ' ' + c.model)}</h5>
-                            <p class="mb-1">📍 Склад: <strong>${warehouseName}</strong></p>
-                            <p class="mb-1">📅 Дата покупка: <strong>${purchaseDate}</strong></p>
-                            <p class="mb-1">💵 Покупна цена: <strong>${(c.purchase_price || 0).toFixed(2)} лв.</strong></p>
-                            <p class="mb-1">🛒 Продадени части: <strong>${(c.total_parts_sold || 0).toFixed(2)} лв.</strong></p>
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card shadow-sm h-100">
+                        <div class="position-relative">
+                            <img src="${photo}" onerror="this.onerror=null; this.src='${defaultImg}';" class="card-img-top" style="height: 180px; object-fit: cover;">
+                            <div class="position-absolute top-0 end-0 p-2">
+                                ${statusBadge}
+                            </div>
+                        </div>
+                        <div class="card-body d-flex flex-column">
+                            <h5 class="card-title fw-bold mb-1">${c.title || (c.make + ' ' + c.model)}</h5>
+                            
+                            <div class="small text-muted mb-2">
+                                <div>📍 Склад: <strong>${warehouseName}</strong></div>
+                                <div>📅 Дата: <strong>${purchaseDate}</strong></div>
+                                <div>⚙️ Двигател / Гориво: ${c.engine || '-'} / ${c.fuel_type || '-'}</div>
+                            </div>
+    
+                            <div class="p-2 bg-light rounded mb-3 small">
+                                <div class="d-flex justify-content-between">
+                                    <span>Покупна цена:</span>
+                                    <strong>${(c.purchase_price || 0).toFixed(2)} лв.</strong>
+                                </div>
+                                <div class="d-flex justify-content-between text-success">
+                                    <span>Продадени части:</span>
+                                    <strong>${(c.total_parts_sold || 0).toFixed(2)} лв.</strong>
+                                </div>
+                            </div>
+    
+                            <!-- ПАДАЩО МЕНЮ ЗА ЧАСТИТЕ (Accordion) -->
+                            <div class="accordion mb-3 mt-auto" id="accordion-car-${c.id}">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed py-2 small" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-car-${c.id}">
+                                            🔩 Части на колата (${carParts.length})
+                                        </button>
+                                    </h2>
+                                    <div id="collapse-car-${c.id}" class="accordion-collapse collapse" data-bs-parent="#accordion-car-${c.id}">
+                                        <ul class="list-group list-group-flush">
+                                            ${partsListHtml}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+    
+                            <!-- БУТОНИ ЗА ДЕЙСТВИЕ -->
+                            <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                                ${!isScrapped ? `<button class="btn btn-sm btn-outline-warning" onclick="scrapCar(${c.id})">♻️ Скрап</button>` : '<span></span>'}
+                                <div>
+                                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="editCar(${c.id})">✏️</button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteCar(${c.id})">🗑️</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
