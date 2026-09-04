@@ -1043,26 +1043,41 @@
 
     // --- 5. ФИНАНСИ ---
     async function loadFinancials() {
-        const res = await fetch('/reports/financials');
-        const data = await res.json();
-        
-        let expenses = 0;
-        let revenue = 0;
-
-        (data.cars || []).forEach(c => {
-            expenses += (c.purchase_price || 0);
-            revenue += (c.scrap_price || 0);
-        });
-
-        (data.parts || []).forEach(p => {
-            if(p.status === 'Продадено') {
-                revenue += (p.sold_price || 0);
+        try {
+            const res = await fetch('/reports/financials');
+            if (!res.ok) {
+                console.error("Сървърна грешка при финансовия отчет:", res.status);
+                return;
             }
-        });
-
-        document.getElementById('totalExpenses').innerText = expenses.toFixed(2) + ' лв.';
-        document.getElementById('totalRevenues').innerText = revenue.toFixed(2) + ' лв.';
-        document.getElementById('netProfit').innerText = (revenue - expenses).toFixed(2) + ' лв.';
+    
+            const data = await res.json();
+            
+            let expenses = 0;
+            let revenue = 0;
+    
+            (data.cars || []).forEach(c => {
+                expenses += parseFloat(c.purchase_price || 0);
+                revenue += parseFloat(c.scrap_price || 0);
+            });
+    
+            (data.parts || []).forEach(p => {
+                // Проверка за 'Продадено' или 'sold'
+                if (p.status === 'Продадено' || (p.status && p.status.toLowerCase().includes('продад'))) {
+                    revenue += parseFloat(p.sold_price || 0);
+                }
+            });
+    
+            const totalExpensesEl = document.getElementById('totalExpenses');
+            const totalRevenuesEl = document.getElementById('totalRevenues');
+            const netProfitEl = document.getElementById('netProfit');
+    
+            if (totalExpensesEl) totalExpensesEl.innerText = expenses.toFixed(2) + ' лв.';
+            if (totalRevenuesEl) totalRevenuesEl.innerText = revenue.toFixed(2) + ' лв.';
+            if (netProfitEl) netProfitEl.innerText = (revenue - expenses).toFixed(2) + ' лв.';
+    
+        } catch (err) {
+            console.error("loadFinancials error:", err);
+        }
     }
 
     // Първоначално зареждане
