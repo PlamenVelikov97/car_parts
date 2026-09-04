@@ -357,7 +357,7 @@ async def ai_analyze(req: AiAnalyzeRequest):
             )
 
         # 3. Валиден URL с поддържан модел (gemini-1.5-flash)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
         
         # 4. JSON Payload с правилните CamelCase ключове (inlineData и mimeType)
         payload = {
