@@ -4,15 +4,15 @@ import base64
 import httpx
 from typing import List, Optional
 from pathlib import Path
+from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from supabase import create_client, Client
 import cloudinary
 import cloudinary.uploader
-import google.generativeai as genai
 
 # === ИНИЦИАЛИЗАЦИЯ НА FASTAPI И JINJA2 ===
 app = FastAPI(title="Автоморга Мениджър")
@@ -57,9 +57,11 @@ class CarCreate(BaseModel):
     warehouse_id: Optional[int] = None
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = []
+    created_at: Optional[str] = None
 
 class CarScrap(BaseModel):
     scrap_price: float = 0.0
+    scrapped_at: Optional[str] = None
 
 class PartCreate(BaseModel):
     title: str
@@ -74,6 +76,7 @@ class PartCreate(BaseModel):
     car_id: Optional[int] = None
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = []
+    created_at: Optional[str] = None
 
 class PartUpdate(BaseModel):
     title: Optional[str] = None
@@ -88,9 +91,12 @@ class PartUpdate(BaseModel):
     car_id: Optional[int] = None
     notes: Optional[str] = None
     photo_urls: Optional[List[str]] = None
+    created_at: Optional[str] = None
+    sold_at: Optional[str] = None
 
 class PartSell(BaseModel):
     sold_price: float = 0.0
+    sold_at: Optional[str] = None
 
 class AiAnalyzeRequest(BaseModel):
     photo_url: str
@@ -141,17 +147,26 @@ def delete_warehouse(wh_id: int):
 @app.get("/cars")
 def get_cars():
     check_db()
-    res = supabase.table("cars").select("*, warehouses(name)").order("id", desc=True).execute()
+    res = supabase.table("cars").select("*, warehouses(name)").order("created_at", desc=True).execute()
     return res.data
 
 @app.get("/cars/summary")
-def get_cars_summary():
+def get_cars_summary(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None)
+):
     check_db()
     try:
-        cars_res = supabase.table("cars").select("*, warehouses(name)").order("id", desc=True).execute()
+        query = supabase.table("cars").select("*, warehouses(name)").order("created_at", desc=True)
+        if start_date:
+            query = query.gte("created_at", f"{start_date}T00:00:00")
+        if end_date:
+            query = query.lte("created_at", f"{end_date}T23:59:59")
+            
+        cars_res = query.execute()
         cars = cars_res.data or []
 
-        parts_res = supabase.table("parts").select("id, car_id, title, status, price, sold_price").execute()
+        parts_res = supabase.table("parts").select("id, car_id, title, status, price, sold_price, created_at, sold_at").execute()
         parts = parts_res.data or []
 
         result = []
@@ -193,6 +208,8 @@ def create_car(car: CarCreate):
     try:
         car_data = car.model_dump() if hasattr(car, "model_dump") else car.dict()
         car_data["title"] = f"{car.make} {car.model}".strip()
+        if not car_data.get("created_at"):
+            car_data["created_at"] = datetime.now(timezone.utc).isoformat()
         
         res = supabase.table("cars").insert(car_data).execute()
         return res.data
@@ -215,9 +232,11 @@ def update_car(car_id: int, car: CarCreate):
 def scrap_car(car_id: int, scrap: CarScrap):
     check_db()
     try:
+        scrapped_time = scrap.scrapped_at or datetime.now(timezone.utc).isoformat()
         data = {
             "status": "Скрап",
-            "scrap_price": scrap.scrap_price
+            "scrap_price": scrap.scrap_price,
+            "scrapped_at": scrapped_time
         }
         res = supabase.table("cars").update(data).eq("id", car_id).execute()
         return res.data
@@ -235,12 +254,29 @@ def delete_car(car_id: int):
 
 # === 3. АВТОЧАСТИ ===
 @app.get("/parts/search")
-def search_parts(q: Optional[str] = None):
+def search_parts(
+    q: Optional[str] = None,
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    status: Optional[str] = Query(None)
+):
     check_db()
     try:
-        query = supabase.table("parts").select("*, warehouses(name), cars(make, model)").order("id", desc=True)
+        query = supabase.table("parts").select("*, warehouses(name), cars(make, model)").order("created_at", desc=True)
+        
         if q:
             query = query.or_(f"title.ilike.%{q}%,make.ilike.%{q}%,model.ilike.%{q}%,oem_number.ilike.%{q}%")
+        
+        if status:
+            query = query.eq("status", status)
+
+        # При филтриране на продадени се взема sold_at, за налични — created_at
+        date_field = "sold_at" if status == "Продадено" else "created_at"
+        if start_date:
+            query = query.gte(date_field, f"{start_date}T00:00:00")
+        if end_date:
+            query = query.lte(date_field, f"{end_date}T23:59:59")
+
         res = query.execute()
         return res.data or []
     except Exception as e:
@@ -254,6 +290,8 @@ def create_part(part: PartCreate):
         part_data = part.model_dump() if hasattr(part, "model_dump") else part.dict()
         if not part_data.get("status"):
             part_data["status"] = "Наличен"
+        if not part_data.get("created_at"):
+            part_data["created_at"] = datetime.now(timezone.utc).isoformat()
             
         res = supabase.table("parts").insert(part_data).execute()
         return res.data
@@ -279,9 +317,11 @@ def update_part(part_id: int, part: PartUpdate):
 def sell_part(part_id: int, sell: PartSell):
     check_db()
     try:
+        sold_time = sell.sold_at or datetime.now(timezone.utc).isoformat()
         data = {
             "status": "Продадено",
-            "sold_price": sell.sold_price
+            "sold_price": sell.sold_price,
+            "sold_at": sold_time
         }
         res = supabase.table("parts").update(data).eq("id", part_id).execute()
         return res.data
@@ -316,7 +356,7 @@ def upload_photos(files: List[UploadFile] = File(...)):
     return {"photo_urls": uploaded_urls}
 
 
-# === AI АНАЛИЗ НА СНИМКИ (С GEMINI 3.6 FLASH) ===
+# === 5. AI АНАЛИЗ НА СНИМКИ ===
 @app.post("/ai-analyze")
 async def ai_analyze(req: AiAnalyzeRequest):
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -325,7 +365,6 @@ async def ai_analyze(req: AiAnalyzeRequest):
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY липсва в Render Environment.")
 
     try:
-        # 1. Изтегляне на снимката от Cloudinary
         async with httpx.AsyncClient(timeout=25.0) as client:
             img_res = await client.get(req.photo_url)
             if img_res.status_code != 200:
@@ -341,7 +380,6 @@ async def ai_analyze(req: AiAnalyzeRequest):
 
             base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
-        # 2. Подготовка на промпта
         if req.type == "car":
             prompt_text = (
                 "Анализирай това изображение на автомобил и върни САМО валиден JSON обект "
@@ -357,7 +395,6 @@ async def ai_analyze(req: AiAnalyzeRequest):
                 "'year' (Година като число или null), 'oem_number' (OEM номер или null)."
             )
 
-        # 3. Ползваме новия актуален модел gemini-3.6-flash
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
         
         payload = {
@@ -406,11 +443,48 @@ async def ai_analyze(req: AiAnalyzeRequest):
     except Exception as e:
         print(f"Unhandled Exception in /ai-analyze: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=f"Грешка AI Анализ: {str(e)}")
-        
-# === 6. ФИНАНСОВИ РЕЗУЛТАТИ ===
+
+
+# === 6. ФИНАНСОВИ РЕЗУЛТАТИ С ФИЛТЪР ПО ДАТИ ===
 @app.get("/reports/financials")
-def get_financials():
+def get_financials(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None)
+):
     check_db()
-    cars = supabase.table("cars").select("purchase_price, scrap_price, status").execute().data or []
-    parts = supabase.table("parts").select("price, sold_price, status").execute().data or []
-    return {"cars": cars, "parts": parts}
+    
+    # 1. Покупки на коли за периода
+    cars_query = supabase.table("cars").select("purchase_price, scrap_price, status, created_at, scrapped_at")
+    if start_date:
+        cars_query = cars_query.gte("created_at", f"{start_date}T00:00:00")
+    if end_date:
+        cars_query = cars_query.lte("created_at", f"{end_date}T23:59:59")
+    cars = cars_query.execute().data or []
+
+    # 2. Продажби на части за периода
+    parts_query = supabase.table("parts").select("price, sold_price, status, created_at, sold_at").eq("status", "Продадено")
+    if start_date:
+        parts_query = parts_query.gte("sold_at", f"{start_date}T00:00:00")
+    if end_date:
+        parts_query = parts_query.lte("sold_at", f"{end_date}T23:59:59")
+    parts = parts_query.execute().data or []
+
+    # 3. Изчисление на финансовите суми
+    total_car_investment = sum(float(c.get("purchase_price") or 0.0) for c in cars)
+    total_parts_sales = sum(float(p.get("sold_price") or 0.0) for p in parts)
+    total_scrap_sales = sum(float(c.get("scrap_price") or 0.0) for c in cars if c.get("status") == "Скрап")
+    
+    total_income = total_parts_sales + total_scrap_sales
+    net_profit = total_income - total_car_investment
+
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "total_car_investment": total_car_investment,
+        "total_parts_sales": total_parts_sales,
+        "total_scrap_sales": total_scrap_sales,
+        "total_income": total_income,
+        "net_profit": net_profit,
+        "cars_count": len(cars),
+        "parts_sold_count": len(parts)
+    }
