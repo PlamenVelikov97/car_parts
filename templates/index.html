@@ -434,10 +434,17 @@
         }
     }
 
-    function filterCars(status) {
-        currentCarFilter = status;
-        document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
-        document.getElementById(`filter-${status}`).classList.add('active');
+    let currentFilter = 'all'; // 'all', 'active', 'scrapped'
+    
+    function filterCars(status, element) {
+        currentFilter = status;
+    
+        // Актуализация на активния бутон във филтъра
+        if (element) {
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            element.classList.add('active');
+        }
+    
         renderCars();
     }
 
@@ -447,42 +454,61 @@
     
         container.innerHTML = '';
     
-        if (!globalCars || globalCars.length === 0) {
-            container.innerHTML = '<div class="col-12 text-center text-muted py-4"><h5>Няма намерени коли</h5></div>';
+        // 1. ФИЛТРИРАНЕ НА КОЛИТЕ
+        let filteredCars = globalCars.filter(c => {
+            const isScrapped = c.status === 'Бракувана' || c.status === 'Скрап';
+            if (currentFilter === 'active') return !isScrapped;
+            if (currentFilter === 'scrapped') return isScrapped;
+            return true; // 'all'
+        });
+    
+        if (filteredCars.length === 0) {
+            container.innerHTML = '<div class="col-12 text-center text-muted py-4"><h5>Няма намерени коли за този филтър</h5></div>';
             return;
         }
     
-        globalCars.forEach(c => {
+        // 2. ОБРАБОТКА И РЕНДЕРИРАНЕ НА ВСЯКА КОЛА
+        filteredCars.forEach(c => {
             const photo = (c.photo_urls && c.photo_urls.length > 0) ? c.photo_urls[0] : defaultImg;
-            
-            // Взимане на името на склада (ако има връзка към warehouses)
             const warehouseName = c.warehouses ? c.warehouses.name : (c.warehouse_id ? `Склад #${c.warehouse_id}` : 'Няма склад');
             const purchaseDate = c.purchase_date || 'Няма дата';
     
-            // Определяне на статуса
             const isScrapped = c.status === 'Бракувана' || c.status === 'Скрап';
             const statusBadge = isScrapped
                 ? `<span class="badge bg-danger">Скрап (${(c.scrap_price || 0).toFixed(2)} лв.)</span>`
                 : `<span class="badge bg-success">${c.status || 'Наличен'}</span>`;
     
-            // Генериране на списък с частите на тази кола за падащото меню
-            const carParts = (c.parts || []);
-            let partsListHtml = '';
+            // 3. ГЕНЕРИРАНЕ НА СПИСЪКА С ЧАСТИ И БУТОНИТЕ ЗА ПРОДАЖБА
+            const carParts = c.parts || [];
+            const availableParts = carParts.filter(p => !p.status || !p.status.toLowerCase().includes('продад'));
             
+            let partsListHtml = '';
             if (carParts.length > 0) {
                 partsListHtml = carParts.map(p => {
                     const isSold = p.status && p.status.toLowerCase().includes('продад');
-                    const partBadge = isSold 
-                        ? `<span class="badge bg-danger">Продадена (${(p.sold_price || 0).toFixed(2)} лв.)</span>` 
-                        : `<span class="badge bg-success">Налична (${(p.price || 0).toFixed(2)} лв.)</span>`;
-                    return `<li class="list-group-item d-flex justify-content-between align-items-center py-1 small">
-                                <span>${p.title}</span>
-                                ${partBadge}
-                            </li>`;
+                    return `
+                        <li class="list-group-item d-flex justify-content-between align-items-center py-2 small">
+                            <div>
+                                <strong>${p.title}</strong>
+                                <div class="text-muted" style="font-size: 0.75rem;">Цена: ${(p.price || 0).toFixed(2)} лв.</div>
+                            </div>
+                            <div>
+                                ${isSold 
+                                    ? `<span class="badge bg-secondary">Продадена (${(p.sold_price || 0).toFixed(2)} лв.)</span>
+                                       <button class="btn btn-sm btn-link text-warning p-0 ms-1" onclick="returnPart(${p.id})" title="Върни в наличност">↩️</button>` 
+                                    : `<button class="btn btn-sm btn-outline-success py-0 px-2" onclick="sellPartPrompt(${p.id}, '${p.title.replace(/'/g, "\\'")}')">💰 Продай</button>`
+                                }
+                            </div>
+                        </li>`;
                 }).join('');
             } else {
-                partsListHtml = '<li class="list-group-item text-muted small py-1">Няма въведени части за тази кола</li>';
+                partsListHtml = '<li class="list-group-item text-muted small py-2">Няма въведени части за тази кола</li>';
             }
+    
+            // 4. ОПЦИИ ЗА ПАДАЩОТО МЕНЮ ЗА БЪРЗА ПРОДАЖБА НА ЧАСТ
+            let sellDropdownOptions = availableParts.map(p => 
+                `<option value="${p.id}">${p.title} (${(p.price || 0).toFixed(2)} лв.)</option>`
+            ).join('');
     
             container.innerHTML += `
                 <div class="col-md-6 col-lg-4 mb-4">
@@ -513,12 +539,23 @@
                                 </div>
                             </div>
     
-                            <!-- ПАДАЩО МЕНЮ ЗА ЧАСТИТЕ (Accordion) -->
+                            <!-- СЕКЦИЯ ЗА БЪРЗА ПРОДАЖБА ЧРЕЗ ПАДАЩО МЕНЮ -->
+                            ${!isScrapped && availableParts.length > 0 ? `
+                                <div class="input-group input-group-sm mb-3">
+                                    <select class="form-select" id="quickSellSelect-${c.id}">
+                                        <option value="">-- Избери част за продажба --</option>
+                                        ${sellDropdownOptions}
+                                    </select>
+                                    <button class="btn btn-success" type="button" onclick="triggerQuickSell(${c.id})">Продай</button>
+                                </div>
+                            ` : ''}
+    
+                            <!-- ПАДАЩ СПИСЪК С ВСИЧКИ ЧАСТИ (Accordion) -->
                             <div class="accordion mb-3 mt-auto" id="accordion-car-${c.id}">
                                 <div class="accordion-item">
                                     <h2 class="accordion-header">
                                         <button class="accordion-button collapsed py-2 small" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-car-${c.id}">
-                                            🔩 Части на колата (${carParts.length})
+                                            🔩 Списък части (${carParts.length})
                                         </button>
                                     </h2>
                                     <div id="collapse-car-${c.id}" class="accordion-collapse collapse" data-bs-parent="#accordion-car-${c.id}">
@@ -529,7 +566,7 @@
                                 </div>
                             </div>
     
-                            <!-- БУТОНИ ЗА ДЕЙСТВИЕ -->
+                            <!-- БУТОНИ ЗА УПРАВЛЕНИЕ НА КОЛАТА -->
                             <div class="d-flex justify-content-between align-items-center pt-2 border-top">
                                 ${!isScrapped ? `<button class="btn btn-sm btn-outline-warning" onclick="scrapCar(${c.id})">♻️ Скрап</button>` : '<span></span>'}
                                 <div>
@@ -542,6 +579,18 @@
                 </div>
             `;
         });
+    }
+    
+    // Помощна функция за бърза продажба от падащото меню
+    function triggerQuickSell(carId) {
+        const select = document.getElementById(`quickSellSelect-${carId}`);
+        const partId = select ? select.value : null;
+        if (!partId) {
+            alert("Моля, изберете част от менюто.");
+            return;
+        }
+        const partTitle = select.options[select.selectedIndex].text;
+        sellPartPrompt(partId, partTitle);
     }
     // 1. Отваряне на модала за бърза продажба и попълване на данните
     function openQuickSellModal(carId, carName) {
